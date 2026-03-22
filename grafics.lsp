@@ -16,36 +16,58 @@
       ;; Si és aigua, la pintam de CYAN
       ((eq tipus 'aigua)
        (CYAN)
-       (quadrat-ple m))
+       (quadrat-ple m)) 
       
       ;; Si és terra, miram el color i què conté
       ((eq tipus 'terra)
        (let ((color-terra (cadr casella))
-             (element (caddr casella)))
+             (element (caddr casella))
+             (equip (cadddr casella))
+             (color-bolla (nth 5 casella))) ; Aquest és el color propi ('r, 'g o 'b)
+         
          ;; 1. Pintam el fons (la terra)
          (cond ((eq color-terra 'r) (RED))
                ((eq color-terra 'g) (GREEN))
                ((eq color-terra 'b) (BLUE)))
          (quadrat (- m 1))
          
-         ;; 2. Pintam l'element si n'hi ha (Base o Lab)
-         (cond ((eq element 'base)
-                (BLACK) ;; Una base pot ser un quadrat negre a dins
-                (moverel 2 2)
-                (quadrat (- m 5))
-                (moverel -2 -2))
-               ((eq element 'lab)
-                (color 255 255 255) ;; Un lab pot ser blanc
-                (moverel 3 3)
-                (quadrat (- m 7))
-                (moverel -3 -3))
-         )
-        )
-        )
-    )
-  )
-                
-)
+         ;; 2. Pintam l'element si n'hi ha (Base, Lab o Bolla)
+         (cond 
+           
+           ;; --- BASE ---
+           ((eq element 'base)
+            ;; Color de l'equip: e1 = Blanc, e2 = Negre
+            (if (eq equip 'e1) (color 255 192 203) (BLACK))
+            (moverel 2 2)
+            (quadrat (- m 5))
+            (moverel -2 -2))
+           
+           ;; --- LABORATORI ---
+           ((eq element 'lab)
+            ;; Color de qui l'ha capturat (o gris si és neutral)
+            (cond ((eq equip 'e1) (color 255 255 255))
+                  ((eq equip 'e2) (BLACK))
+                  (t (color 128 128 128))) ; Groc fosc / Gris
+            (moverel 4 4)
+            (quadrat (- m 9))
+            (moverel -4 -4))
+           
+           ;; --- BOLLA ---
+           ((eq element 'bolla)
+            ;; A. El contorn de la bolla és del seu color de pintura
+            (cond ((eq color-bolla 'r) (RED))
+                  ((eq color-bolla 'g) (GREEN))
+                  ((eq color-bolla 'b) (BLUE)))
+            (moverel 3 3)
+            (quadrat (- m 7))
+            
+            ;; B. El centre de la bolla ens diu de quin equip és
+            (if (eq equip 'e1) (color 255 192 203) (BLACK))
+            (moverel 1 1)
+            (quadrat (- m 9))
+            
+            ;; Retornem el cursor a lloc
+            (moverel -4 -4))))))))
 
 (defun pinta-columnes (fila x y)
   "Recorre una fila (llista de caselles) d'esquerra a dreta"
