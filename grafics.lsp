@@ -16,7 +16,7 @@
       ;; Si és aigua, la pintam de CYAN
       ((eq tipus 'aigua)
        (CYAN)
-       (quadrat m))
+       (quadrat-ple m))
       
       ;; Si és terra, miram el color i què conté
       ((eq tipus 'terra)
@@ -26,19 +26,26 @@
          (cond ((eq color-terra 'r) (RED))
                ((eq color-terra 'g) (GREEN))
                ((eq color-terra 'b) (BLUE)))
-         (quadrat m)
+         (quadrat (- m 1))
          
          ;; 2. Pintam l'element si n'hi ha (Base o Lab)
          (cond ((eq element 'base)
                 (BLACK) ;; Una base pot ser un quadrat negre a dins
                 (moverel 2 2)
-                (quadrat (- m 4))
+                (quadrat (- m 5))
                 (moverel -2 -2))
                ((eq element 'lab)
                 (color 255 255 255) ;; Un lab pot ser blanc
                 (moverel 3 3)
-                (quadrat (- m 6))
-                (moverel -3 -3))))))))
+                (quadrat (- m 7))
+                (moverel -3 -3))
+         )
+        )
+        )
+    )
+  )
+                
+)
 
 (defun pinta-columnes (fila x y)
   "Recorre una fila (llista de caselles) d'esquerra a dreta"
