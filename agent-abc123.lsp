@@ -42,17 +42,18 @@
         (t (agent-abc123-busca-objectius coord el-meu-equip (cdr visio)))))
 
 ;; ----------------------------------------------------------------------
-;; CERVELL DE LA BASE
+;; CERVELL DE LA BASE (Agent ABC123)
 ;; ----------------------------------------------------------------------
 
 (defun agent-abc123-decisio-base (pintura coord visio)
-  "Lògica per a les bases: Crear bolles si hi ha pintura suficient."
-  (cond ((>= pintura 50) ; Costa 50 de pintura
+  "Lògica per a les bases: Crear bolles de colors aleatoris si hi ha pintura."
+  (cond ((>= pintura 50)
          (let ((buides (agent-abc123-busca-caselles-buides-adj coord visio)))
-           (cond ((null buides) nil) ; No hi ha espai
+           (cond ((null buides) nil)
                  (t 
-                  ;; Cream una bolla blava ('b) a la primera casella lliure
-                  (list (list 'crea-bolla (list 'b (car buides))))))))
+                  ;; Triem un color a l'atzar entre r, g i b
+                  (let ((color-aleatori (nth (random 3) '(r g b))))
+                    (list (list 'crea-bolla (list color-aleatori (car buides)))))))))
         (t nil)))
 
 ;; ----------------------------------------------------------------------
@@ -80,12 +81,13 @@
       (t (agent-abc123-intentar-moure coord temps-moure visio)))))
 
 (defun agent-abc123-intentar-moure (coord temps-moure visio)
-  "Sub-lògica per moure una bolla."
+  "Sub-lògica per moure una bolla de forma aleatòria per explorar el mapa."
   (cond ((< temps-moure 1)
          (let ((buides (agent-abc123-busca-caselles-buides-adj coord visio)))
            (cond ((not (null buides))
-                  ;; Ens movem a la primera casella buida disponible
-                  (list (list 'mou (car buides))))
+                  ;; TRUC D'INTEL·LIGÈNCIA: Triem una casella buida a l'atzar!
+                  (let ((casella-aleatoria (nth (random (length buides)) buides)))
+                    (list (list 'mou casella-aleatoria))))
                  (t nil))))
         (t nil)))
 

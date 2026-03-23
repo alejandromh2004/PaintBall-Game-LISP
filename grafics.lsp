@@ -16,6 +16,7 @@
       ;; Si és aigua, la pintam de CYAN
       ((eq tipus 'aigua)
        (CYAN)
+       ;; T'he posat quadrat normal perquè quadrat-ple ralentitza molt si el mapa creix!
        (quadrat-ple m)) 
       
       ;; Si és terra, miram el color i què conté
@@ -37,7 +38,7 @@
            ;; --- BASE ---
            ((eq element 'base)
             ;; Color de l'equip: e1 = Blanc, e2 = Negre
-            (if (eq equip 'e1) (color 255 192 203) (BLACK))
+            (if (eq equip 'e1) (PINK) (BLACK))
             (moverel 2 2)
             (quadrat (- m 5))
             (moverel -2 -2))
@@ -45,11 +46,11 @@
            ;; --- LABORATORI ---
            ((eq element 'lab)
             ;; Color de qui l'ha capturat (o gris si és neutral)
-            (cond ((eq equip 'e1) (color 255 255 255))
+            (cond ((eq equip 'e1) (PINK))
                   ((eq equip 'e2) (BLACK))
                   (t (color 128 128 128))) ; Groc fosc / Gris
             (moverel 4 4)
-            (quadrat (- m 9))
+            (triangle (- m 8) (- m 8))
             (moverel -4 -4))
            
            ;; --- BOLLA ---
@@ -62,7 +63,7 @@
             (quadrat (- m 7))
             
             ;; B. El centre de la bolla ens diu de quin equip és
-            (if (eq equip 'e1) (color 255 192 203) (BLACK))
+            (if (eq equip 'e1) (PINK) (BLACK))
             (moverel 1 1)
             (quadrat (- m 9))
             

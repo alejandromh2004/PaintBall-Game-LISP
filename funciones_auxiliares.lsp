@@ -45,6 +45,10 @@
         (color 0 0 0)
 )
 
+(defun PINK () 
+    (color 255 0 255)
+)
+
 (defun quadrats (n l d)
     (cond ((= 0 n))
           (t 
@@ -384,4 +388,56 @@
           (t (+ (* (car l1) (car l2)) (pescalar (cdr l1) (cdr l2))))
     )
 )
+
+;; ======================================================================
+;; FUNCIONS DE CERCLE (Adaptades a posició relativa)
+;; ======================================================================
+
+(defun radians (graus)
+  (/ (* graus (* 2 pi)) 360.0))
+
+(defun cercle (l segments)
+  "Dibuixa un cercle de diàmetre 'l' a la posició actual i retorna el cursor al lloc."
+  (let ((radi (/ l 2.0)))
+    ;; 1. Movem el llapis a la dreta del tot per començar a dibuixar (angle 0)
+    (moverel (round (* 2 radi)) (round radi))
+    ;; 2. Cridem a la teva funció recursiva passant-li el (x,y) relatiu actual
+    (cercle2 radi (/ 360.0 segments) 0 (* 2 radi) radi)
+    ;; 3. Tornam el cursor a l'origen per no rompre la quadrícula del mapa
+    (moverel (- (round (* 2 radi))) (- (round radi)))))
+
+(defun cercle2 (radi pas angle x-actual y-actual)
+  "Funció recursiva que dibuixa els segments del cercle."
+  (cond ((< angle 360)
+         (let* ((nou-x (+ radi (* radi (cos (radians (+ angle pas))))))
+                (nou-y (+ radi (* radi (sin (radians (+ angle pas))))))
+                ;; Calculem la diferència (quant ens hem de moure des del punt anterior)
+                (dx (- nou-x x-actual))
+                (dy (- nou-y y-actual)))
+           ;; Dibuixem només el desplaçament
+           (drawrel (round dx) (round dy))
+           ;; Crida recursiva amb el nou angle i la nova posició
+           (cercle2 radi pas (+ angle pas) nou-x nou-y)))
+        (t t)))
+
+(defun triangle (base altura)
+  "Dibuixa un triangle relatiu cap amunt i torna a l'origen."
+  (let ((meitat (round (/ base 2.0))))
+    ;; Baixem a la cantonada inferior esquerra del triangle
+    (moverel 0 altura)
+    ;; Pugem dibuixant fins a la punta superior central
+    (drawrel meitat (- altura))
+    ;; Baixem dibuixant fins a la cantonada inferior dreta
+    (drawrel (- base meitat) altura)
+    ;; Dibuixem la línia horitzontal de sota per tancar-lo
+    (drawrel (- base) 0)
+    ;; Desfem el primer moviment per tornar a l'origen de la casella
+    (moverel 0 (- altura))))
+
+(defun sleep (seconds)
+    "Espera la quantitat indicada de segons"
+    ; Això és un bucle iteratiu. NO PODEU FER-LO SERVIR ENLLOC MÉS
+    (do ((endtime (+ (get-internal-real-time)
+                     (* seconds internal-time-units-per-second))))
+        ((> (get-internal-real-time) endtime))))
     
