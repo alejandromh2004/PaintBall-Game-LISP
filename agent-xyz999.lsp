@@ -60,54 +60,104 @@
 ;; CERVELL DE LA BOLLA
 ;; ----------------------------------------------------------------------
 
-(defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure visio)
-  "Lògica per a les bolles: Disparar si pot, o moure's."
-  ;; Els cooldowns poden venir com a nil al principi, els tractem com a 0
+(defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure visio memoria)
+  "Lògica per a les bolles: Disparar si pot, o moure's intel·ligentment."
   (let ((temps-pintar (if tr-pintar tr-pintar 0))
         (temps-moure (if tr-moure tr-moure 0)))
-    
     (cond 
-      ;; 1. Prioritat: Disparar a un objectiu si el cooldown és < 1
+      ;; 1. Disparar (Prioritat 1)
       ((< temps-pintar 1)
        (let ((objectius (agent-xyz999-busca-objectius coord equip visio)))
          (cond ((not (null objectius))
-                ;; Disparem al primer objectiu que veiem
                 (list (list 'pinta (car objectius))))
-               (t 
-                ;; Si no hi ha objectius, intentem moure'ns
-                (agent-xyz999-intentar-moure coord temps-moure visio)))))
+               (t (agent-xyz999-intentar-moure coord temps-moure visio memoria)))))
       
-      ;; 2. Si no pot disparar, intenta moure's
-      (t (agent-xyz999-intentar-moure coord temps-moure visio)))))
+      ;; 2. Moure's
+      (t (agent-xyz999-intentar-moure coord temps-moure visio memoria)))))
 
-(defun agent-xyz999-intentar-moure (coord temps-moure visio)
-  "Sub-lògica per moure una bolla de forma aleatòria per explorar el mapa."
+(defun agent-xyz999-intentar-moure (coord temps-moure visio memoria)
+  "Es mou cap al primer objectiu de la memòria. Si no n'hi ha, explora a l'atzar."
   (cond ((< temps-moure 1)
          (let ((buides (agent-xyz999-busca-caselles-buides-adj coord visio)))
-           (cond ((not (null buides))
-                  ;; TRUC D'INTEL·LIGÈNCIA: Triem una casella buida a l'atzar!
+           (cond ((null buides) nil)
+                 (memoria
+                  ;; INTEL·LIGÈNCIA: Tenim un objectiu a la llibreta! Anem cap a ell.
+                  (let ((millor-casella (agent-xyz999-millor-pas buides (car memoria))))
+                    (list (list 'mou millor-casella))))
+                 (t
+                  ;; EXPLORACIÓ: La memòria està buida, busquem a l'atzar.
                   (let ((casella-aleatoria (nth (random (length buides)) buides)))
-                    (list (list 'mou casella-aleatoria))))
-                 (t nil))))
+                    (list (list 'mou casella-aleatoria)))))))
         (t nil)))
-
 ;; ----------------------------------------------------------------------
 ;; PUNT D'ENTRADA PRINCIPAL
 ;; ----------------------------------------------------------------------
 
 (defun agent-xyz999 (dades)
-  "Retorna la jugada que realitza l'agent XYZ999 en un torn."
-  ;; Extraiem la informació empaquetada pel controlador
-  (let ((equip (nth 1 dades))
-        (pintura (nth 2 dades))
-        (tipus-unitat (nth 3 dades))
-        (coord (nth 4 dades))
-        (tr-pintar (nth 7 dades))
-        (tr-moure (nth 8 dades))
-        (visio (nth 9 dades)))
+  "Retorna (accio nova-memoria) o (nil nova-memoria)."
+  (let* ((equip (nth 1 dades))
+         (pintura (nth 2 dades))
+         (tipus-unitat (nth 3 dades))
+         (coord (nth 4 dades))
+         (tr-pintar (nth 7 dades))
+         (tr-moure (nth 8 dades))
+         (visio (nth 9 dades))
+         (memoria-antiga (nth 10 dades)) 
+         
+         ;; 1. La unitat llegeix la visió i apunta/esborra coses a la llibreta
+         (memoria-nova (agent-xyz999-actualitza-memoria visio memoria-antiga equip))
+         
+         ;; 2. Pren la decisió
+         (accio (cond ((eq tipus-unitat 'base)
+                       (agent-xyz999-decisio-base pintura coord visio))
+                      ((eq tipus-unitat 'bolla)
+                       (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure visio memoria-nova))
+                      (t nil))))
     
-    (cond ((eq tipus-unitat 'base)
-           (agent-xyz999-decisio-base pintura coord visio))
-          ((eq tipus-unitat 'bolla)
-           (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure visio))
-          (t nil))))
+    ;; 3. Retornem l'acció EXACTAMENT com la demana el controlador
+    ;; Retornem una llista amb l'acció original i la llibreta actualitzada
+    (list accio memoria-nova)))
+
+;; ----------------------------------------------------------------------
+;; FUNCIONS DE GESTIÓ DE MEMORIA
+;; ----------------------------------------------------------------------
+
+(defun agent-xyz999-esborra-coord (coord llista)
+  "Esborra una coordenada de la memòria."
+  (cond ((null llista) nil)
+        ((equal coord (car llista)) (agent-xyz999-esborra-coord coord (cdr llista)))
+        (t (cons (car llista) (agent-xyz999-esborra-coord coord (cdr llista))))))
+
+(defun agent-xyz999-actualitza-memoria (visio memoria el-meu-equip)
+  "Llegeix la visió i actualitza la llibreta (memòria) amb els objectius."
+  (cond ((null visio) memoria)
+        (t
+         (let* ((casella (car visio))
+                (coord (car casella))
+                (element (cadddr casella))
+                (equip-element (nth 4 casella))
+                ;; Cridem recursivament per a la resta de la visió
+                (mem-restant (agent-xyz999-actualitza-memoria (cdr visio) memoria el-meu-equip)))
+           (cond
+             ;; Si és un Lab neutral/enemic o una Base enemiga, l'afegim (si no hi és ja)
+             ((and element (not (eq equip-element el-meu-equip)) 
+                   (or (eq element 'lab) (eq element 'base)))
+              (if (member coord mem-restant :test #'equal)
+                  mem-restant
+                  (cons coord mem-restant)))
+             
+             ;; Si és un Lab NOSTRE (ja capturat), l'esborrem de la memòria perquè deixin d'anar-hi
+             ((and (eq element 'lab) (eq equip-element el-meu-equip))
+              (agent-xyz999-esborra-coord coord mem-restant))
+             
+             (t mem-restant))))))
+
+(defun agent-xyz999-millor-pas (buides desti)
+  "Tria la casella buida que ens acosta més a la coordenada destí."
+  (cond ((null buides) nil)
+        ((null (cdr buides)) (car buides))
+        (t (let ((millor-resta (agent-xyz999-millor-pas (cdr buides) desti)))
+             (if (< (agent-xyz999-distancia-q (car buides) desti)
+                    (agent-xyz999-distancia-q millor-resta desti))
+                 (car buides)
+                 millor-resta)))))

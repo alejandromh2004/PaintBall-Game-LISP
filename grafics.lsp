@@ -4,10 +4,37 @@
 ;; Professor: XXX.
 ;; Lliurament: primera convocatòria.
 ;; Fitxer del mòdul gràfic.
-;; <Descripció de les funcions d'aquest fitxer>
 
 ;; Variables globals per al dibuix (mida de la casella)
-(setq m 13) 
+(setq m 15) 
+
+;; ======================================================================
+;; FUNCIONS DE DIBUIX DE DANYS
+;; ======================================================================
+
+(defun dibuixa-marca (color x y)
+  "Dibuixa un petit quadrat de 2x2 a la posició x,y per marcar dany."
+  (cond ((eq color 'r) (RED))
+        ((eq color 'g) (GREEN))
+        ((eq color 'b) (BLUE)))
+  (moverel x y)
+  (quadrat 2) ; Un quadrat petitó
+  (moverel (- x) (- y))) ; Tornem a l'origen
+
+(defun dibuixa-danys (colors)
+  "Dibuixa marques a les cantonades per cada color de dany rebut."
+  (cond ((null colors) nil)
+        (t
+         (let ((c (car colors)))
+           ;; Assignant cantonades segons el color
+           (cond ((eq c 'r) (dibuixa-marca 'r 1 1))                 ; Dalt-Esquerra
+                 ((eq c 'g) (dibuixa-marca 'g (- m 3) 1))           ; Dalt-Dreta
+                 ((eq c 'b) (dibuixa-marca 'b 1 (- m 3))))          ; Baix-Esquerra
+           (dibuixa-danys (cdr colors))))))
+
+;; ======================================================================
+;; PINTAR ELEMENTS
+;; ======================================================================
 
 (defun pinta-element (casella)
   "Tradueix la informació d'una casella a la pantalla"
@@ -16,7 +43,6 @@
       ;; Si és aigua, la pintam de CYAN
       ((eq tipus 'aigua)
        (CYAN)
-       ;; T'he posat quadrat normal perquè quadrat-ple ralentitza molt si el mapa creix!
        (quadrat-ple m)) 
       
       ;; Si és terra, miram el color i què conté
@@ -24,7 +50,8 @@
        (let ((color-terra (cadr casella))
              (element (caddr casella))
              (equip (cadddr casella))
-             (color-bolla (nth 5 casella))) ; Aquest és el color propi ('r, 'g o 'b)
+             (colors-pintat (nth 4 casella))  ; <--- Extraiem la llista de danys
+             (color-bolla (nth 5 casella)))   ; Aquest és el color propi ('r, 'g o 'b)
          
          ;; 1. Pintam el fons (la terra)
          (cond ((eq color-terra 'r) (RED))
@@ -34,10 +61,8 @@
          
          ;; 2. Pintam l'element si n'hi ha (Base, Lab o Bolla)
          (cond 
-           
            ;; --- BASE ---
            ((eq element 'base)
-            ;; Color de l'equip: e1 = Blanc, e2 = Negre
             (if (eq equip 'e1) (PINK) (BLACK))
             (moverel 2 2)
             (quadrat (- m 5))
@@ -45,7 +70,6 @@
            
            ;; --- LABORATORI ---
            ((eq element 'lab)
-            ;; Color de qui l'ha capturat (o gris si és neutral)
             (cond ((eq equip 'e1) (PINK))
                   ((eq equip 'e2) (BLACK))
                   (t (color 128 128 128))) ; Groc fosc / Gris
@@ -68,7 +92,16 @@
             (quadrat (- m 9))
             
             ;; Retornem el cursor a lloc
-            (moverel -4 -4))))))))
+            (moverel -4 -4)))
+         
+         ;; 3. Finalment, pintem els indicadors de dany si n'hi ha
+         ;; Ho fem fora del cond anterior perquè es dibuixi per sobre de l'element
+         (cond ((and element colors-pintat)
+                (dibuixa-danys colors-pintat))))))))
+
+;; ======================================================================
+;; MOTORS DE DIBUIX
+;; ======================================================================
 
 (defun pinta-columnes (fila x y)
   "Recorre una fila (llista de caselles) d'esquerra a dreta"

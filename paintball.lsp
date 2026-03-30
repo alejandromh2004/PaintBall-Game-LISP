@@ -23,7 +23,7 @@
   (mode 0 0 640 375) 
   
   ;; Llegim el mapa del fitxer i el guardam localment
-  (let ((mapa-inicial (carrega-mapa "proyectos/projecte_inicial/maps/tiny.map")))
+  (let ((mapa-inicial (carrega-mapa "proyectos/projecte_inicial/maps/bait.map")))
     
     ;; Li passam el mapa al mòdul gràfic perquè el pinti
     (inicia-partida mapa-inicial)
@@ -55,10 +55,10 @@
   ;; - Pintura E2: 200
   ;; - Memòria E1: nil (buida)
   ;; - Memòria E2: nil (buida)
-  (bucle-partida 1 mapa-inicial 200 200 nil nil 'manual 1))
+  (bucle-partida 1 mapa-inicial 200 200 nil nil))
 
 
-(defun bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 mode velocitat)
+(defun bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)
   "El motor principal del joc. S'executa recursivament a cada torn."
   
   (dibuixa-mapa mapa)
@@ -66,10 +66,28 @@
   (format t "~%--- RONDA ~A ---~%" ronda)
   (format t "Pintura E1: ~A | Pintura E2: ~A~%" pint-e1 pint-e2)
   
-  (cond ((> ronda 1500)
-         (RED)
-         (format t "Final de la partida: Límit de 1500 torns assolit!~%")
-         'fi-de-partida)
+  (cond 
+    ;; 1. VICTÒRIA EQUIP 2 (La base de l'E1 ha desaparegut)
+    ((= (compta-bases-mapa mapa 'e1) 0)
+     (format t "~%==================================================~%")
+     (format t "    VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT    ~%")
+     (format t "               GUANYA L'EQUIP 2!                  ~%")
+     (format t "==================================================~%")
+     'fi-de-partida)
+
+    ;; 2. VICTÒRIA EQUIP 1 (La base de l'E2 ha desaparegut)
+    ((= (compta-bases-mapa mapa 'e2) 0)
+     (format t "~%==================================================~%")
+     (format t "    VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT    ~%")
+     (format t "               GUANYA L'EQUIP 1!                  ~%")
+     (format t "==================================================~%")
+     'fi-de-partida)
+
+    ;; 3. EMPAT PER LÍMIT DE TORNS
+    ((> ronda 1500)
+     (format t "~%Final de la partida: Límit de 1500 torns assolit!~%")
+     ;; Aquí més endavant podem cridar a la funció de desempat
+     'fi-de-partida)
         
         (t 
          (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1)
@@ -98,51 +116,41 @@
                 (nova-pint-e1 (if (eq equip-actiu 'e1) nova-pintura-equip pint-e1-inici))
                 (nova-pint-e2 (if (eq equip-actiu 'e2) nova-pintura-equip pint-e2-inici))
                 (nova-mem-e1 (if (eq equip-actiu 'e1) nova-memoria-equip mem-e1))
-                (nova-mem-e2 (if (eq equip-actiu 'e2) nova-memoria-equip mem-e2))
-                
-                ;; ==========================================================
-                ;; 4. CONTROL DE MODE I VELOCITAT
-                ;; ==========================================================
-                (controls (processa-controls mode velocitat))
-                (nou-mode (car controls))
-                (nova-velocitat (cadr controls)))
+                (nova-mem-e2 (if (eq equip-actiu 'e2) nova-memoria-equip mem-e2)))
            
-           ;; Si el mode és Automàtic, imprimim instruccions i fem la pausa de temps
-           (when (eq nou-mode 'auto)
-             (BLACK)
-             (format t ">> AUTO (Velocitat x~A). Escriu 'm' + ENTER per aturar.~%" nova-velocitat)
-             (sleep 1))
+           ;; 4. PAUSA MANUAL CLÀSSICA
+           (BLACK)
+           (format t ">> TECLA 'Enter' PER PASSAR AL SEGUENT TORN")
+           (read-line)
            
-           ;; Crida recursiva amb el mode i velocitat actualitzats
+           ;; 5. Crida recursiva neta (només amb els 6 paràmetres originals)
            (bucle-partida (+ ronda 1) 
                           nou-mapa 
                           nova-pint-e1 
                           nova-pint-e2 
                           nova-mem-e1 
-                          nova-mem-e2
-                          nou-mode
-                          nova-velocitat)))))
+                          nova-mem-e2)))))
+
 ;; ======================================================================
-;; CONTROLS DE LA PARTIDA (Manual / Automàtic i Velocitat)
+;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
 ;; ======================================================================
 
-(defun processa-controls (mode velocitat)
-  "Llegeix l'entrada de l'usuari per canviar de mode i velocitat."
-  (let ((entrada (cond
-                   ;; Si estem en manual, ens quedem bloquejats esperant
-                   ((eq mode 'manual)
-                    (BLACK)
-                    (format t ">> MANUAL. Prem ENTER per continuar, o escriu 'a' + ENTER per mode Automatic: ")
-                    (read-line))
-                   
-                   ;; Si estem en auto i no hi ha res escrit, retornem nil
-                   (t nil))))
-    
-    ;; Avaluem què ha escrit l'usuari i retornem una llista (nou-mode nova-velocitat)
-    (cond ((equal entrada "m") (list 'manual velocitat))
-          ((equal entrada "a") (list 'auto velocitat))
-          ;; Si no ha escrit res o ha posat una altra cosa, mantenim l'estat actual
-          (t (list mode velocitat)))))
+(defun compta-bases-fila (fila equip)
+  "Compta quantes bases té un equip en una fila."
+  (cond ((null fila) 0)
+        (t (let ((casella (car fila)))
+             (cond ((and (eq (car casella) 'terra)
+                         (eq (caddr casella) 'base)
+                         (eq (cadddr casella) equip))
+                    (+ 1 (compta-bases-fila (cdr fila) equip)))
+                   (t (compta-bases-fila (cdr fila) equip)))))))
+
+(defun compta-bases-mapa (mapa equip)
+  "Compta quantes bases té un equip en tot el mapa."
+  (cond ((null mapa) 0)
+        (t (+ (compta-bases-fila (car mapa) equip)
+              (compta-bases-mapa (cdr mapa) equip)))))
+
 ;; ======================================================================
 ;; CERCA D'UNITATS
 ;; ======================================================================
@@ -254,11 +262,20 @@
           memoria)))
 
 (defun demana-accions-agent (dades-empaquetades)
-  "Crida a la funció de l'agent corresponent (hardcoded com demana l'enunciat) i en retorna les accions."
-  (let ((equip (cadr dades-empaquetades))) ; El segon element és l'equip
-    (cond ((eq equip 'e1) (agent-abc123 dades-empaquetades))
-          ((eq equip 'e2) (agent-xyz999 dades-empaquetades))
-          (t nil))))
+  "Crida a l'agent i unifica el format perquè tots retornin (accions memòria)."
+  (let ((equip (cadr dades-empaquetades))
+        (memoria-actual (nth 10 dades-empaquetades))) ; Recuperem la memòria actual
+    
+    (cond 
+      ;; Si és l'agent ANTIC (abc123), només retorna accions, així que li peguem la memòria nosaltres
+      ((eq equip 'e1) 
+       (list (agent-abc123 dades-empaquetades) memoria-actual))
+      
+      ;; Si és el NOU agent (xyz999), ell ja retorna (accions nova-memòria)
+      ((eq equip 'e2) 
+       (agent-xyz999 dades-empaquetades))
+      
+      (t (list nil memoria-actual)))))
 
 ;; ======================================================================
 ;; PROCESSADOR D'ACCIONS
@@ -329,7 +346,7 @@
              ;; ACCIÓ: PINTA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'pinta)
-              (let* ((coord-desti args) ; Coordenada on disparem
+              (let* ((coord-desti args) 
                      (dest-x (car coord-desti))
                      (dest-y (cadr coord-desti))
                      (orig-x (car coord-origen))
@@ -337,22 +354,18 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                ;; Només podem pintar si el destí és terra
                 (cond ((eq (car casella-desti) 'terra)
                        (let* ((color-terra-orig (cadr casella-origen))
                               (equip-tirador (cadddr casella-origen))
                               (color-tirador (nth 5 casella-origen))
                               
-                              ;; 1. Calculem el cooldown (1 normal, 3 si trepitjam color enemic)
                               (nou-tr-pintar (if (eq color-terra-orig color-tirador) 1 3))
                               
-                              ;; Actualitzem l'origen amb el cooldown gastat
                               (origen-actualitzat (list 'terra color-terra-orig 'bolla equip-tirador
                                                         (nth 4 casella-origen) color-tirador 
                                                         nou-tr-pintar (nth 7 casella-origen)))
                               (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-actualitzat))
                               
-                              ;; 2. Analitzem què hi ha al destí
                               (element-desti (caddr casella-desti))
                               (equip-desti (cadddr casella-desti))
                               (colors-desti (nth 4 casella-desti))
@@ -360,7 +373,7 @@
                               (tr-p-desti (nth 6 casella-desti))
                               (tr-m-desti (nth 7 casella-desti))
                               
-                              ;; Si hi ha base/bolla enemiga, afegim el color del tret (evitant duplicats)
+                              ;; Afegim el color del tret si no hi era ja
                               (nous-colors-desti 
                                (if (and element-desti (not (eq element-desti 'lab)))
                                    (if (member color-tirador colors-desti)
@@ -368,39 +381,37 @@
                                        (cons color-tirador colors-desti))
                                    colors-desti))
                               
-                              ;; Comprovem si ha acumulat els 3 colors per explotar
-                              (explota (and nous-colors-desti
-                                            (member 'r nous-colors-desti)
-                                            (member 'g nous-colors-desti)
-                                            (member 'b nous-colors-desti)))
+                              ;; ====================================================
+                              ;; NOVA LÒGICA D'EXPLOSIÓ: Sumem el color propi de la unitat
+                              ;; ====================================================
+                              (colors-totals (cons color-propi-desti nous-colors-desti))
                               
-                              ;; 3. Construïm la nova casella de destí
+                              (explota (and (member 'r colors-totals)
+                                            (member 'g colors-totals)
+                                            (member 'b colors-totals)))
+                              
                               (desti-actualitzat 
                                (cond 
                                  (explota 
-                                  ;; BOOM! L'element explota, però el terra queda del nostre color
+                                  ;; BOOM!
                                   (list 'terra color-tirador nil nil nil nil nil nil))
-                                 
                                  ((eq element-desti 'lab)
-                                  ;; LAB CAPTURAT! Ara és del nostre equip i canviem el terra
+                                  ;; LAB CAPTURAT!
                                   (list 'terra color-tirador 'lab equip-tirador nil nil nil nil))
-                                 
                                  (t
-                                  ;; NO EXPLOTA o TERRA BUIDA. Terra pintada, la resta igual
+                                  ;; NO EXPLOTA o TERRA BUIDA
                                   (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti))))
                               
-                              ;; Inserim el destí actualitzat
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat)))
                          
                          (aplica-accions (cdr accions) nou-mapa pintura equip coord-origen)))
-                      (t 
-                       ;; Moviment invàlid (aigua), s'ignora
-                       (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))
+                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))
              
              ;; ---------------------------------------------------------
              ;; IGNORAR ALTRES ACCIONS
              ;; ---------------------------------------------------------
              (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))))
+
 
 (defun processa-totes-les-unitats (unitats mapa ronda pintura equip memoria)
   "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
@@ -409,22 +420,27 @@
          (let* ((coord (car unitats))
                 (x (car coord))
                 (y (cadr coord))
-                ;; 1. Empaquetem el que veu aquesta unitat en concret
+                ;; 1. Empaquetem el que veu aquesta unitat
                 (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y))
-                ;; 2. Cridem l'agent intel·ligent
-                (accions (demana-accions-agent dades))
+                
+                ;; 2. Cridem l'agent intel·ligent (que ara sempre retorna una llista de 2 elements)
+                (resposta-agent (demana-accions-agent dades))
+                (accions (car resposta-agent))        ;; El primer element són les accions
+                (nova-memoria (cadr resposta-agent))  ;; El segon element és la llibreta actualitzada!
+                
                 ;; 3. Apliquem les accions al mapa
                 (resultat-accions (aplica-accions accions mapa pintura equip coord))
                 (mapa-post-accions (car resultat-accions))
                 (pintura-post-accions (cadr resultat-accions)))
            
-           ;; 4. Crida recursiva per a la següent unitat, passant-li l'estat ja actualitzat
+           ;; 4. Crida recursiva per a la següent unitat! 
+           ;; ATENCIÓ: Li passem la NOVA-MEMORIA perquè la següent bolla ja sàpiga el que ha vist aquesta!
            (processa-totes-les-unitats (cdr unitats) 
                                        mapa-post-accions 
                                        ronda 
                                        pintura-post-accions 
                                        equip 
-                                       memoria)))))
+                                       nova-memoria)))))
 
 
 ;; ======================================================================
