@@ -19,7 +19,7 @@
 
 (defun inici ()
   "Punt d'entrada del programa."
-  (color 0 0 0 255 255 255) 
+  (BLACK) 
   (mode 0 0 640 375) 
   
   ;; Llegim el mapa del fitxer i el guardam localment
@@ -30,7 +30,7 @@
     
   )
 
-  (color 0 0 0 255 255 255) 
+  (BLACK) 
   t)
 
 (defun carrega-mapa (nom-fitxer)
@@ -58,7 +58,7 @@
   (bucle-partida 1 mapa-inicial 200 200 nil nil))
 
 
-(defun bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)
   "El motor principal del joc. S'executa recursivament a cada torn."
   
   (dibuixa-mapa mapa)
@@ -281,7 +281,7 @@
 ;; PROCESSADOR D'ACCIONS
 ;; ======================================================================
 
-(defun aplica-accions (accions mapa pintura equip coord-origen)
+(defun-tco aplica-accions (accions mapa pintura equip coord-origen)
   "Aplica recursivament una llista d'accions retornant el nou (mapa pintura)."
   (cond ((null accions) (list mapa pintura))
         (t
@@ -413,7 +413,7 @@
              (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))))
 
 
-(defun processa-totes-les-unitats (unitats mapa ronda pintura equip memoria)
+(defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria)
   "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
   (cond ((null unitats) (list mapa pintura memoria))
         (t
