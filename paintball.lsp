@@ -115,7 +115,10 @@
   "El motor principal del joc. S'executa recursivament a cada torn."
   
   ;; Dibuixem només si no estem saltant torns visuals
-  (cond ((<= skip-visual 0) (dibuixa-mapa mapa)))
+  (cond ((<= skip-visual 0)
+       (dibuixa-mapa mapa ronda
+                     (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
+                     pint-e1 pint-e2)))
   
   (BLACK)
   (format t "~%--- RONDA ~A ---~%" ronda)
