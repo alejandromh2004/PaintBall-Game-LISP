@@ -63,8 +63,8 @@
 (defun agent-abc123-decisio-bolla (coord equip tr-pintar tr-moure visio)
   "Lògica per a les bolles: Disparar si pot, o moure's."
   ;; Els cooldowns poden venir com a nil al principi, els tractem com a 0
-  (let ((temps-pintar (if tr-pintar tr-pintar 0))
-        (temps-moure (if tr-moure tr-moure 0)))
+  (let ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
+        (temps-moure (cond (tr-moure tr-moure) (t 0))))
     
     (cond 
       ;; 1. Prioritat: Disparar a un objectiu si el cooldown és < 1

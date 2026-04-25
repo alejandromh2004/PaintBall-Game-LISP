@@ -62,8 +62,8 @@
 
 (defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure visio memoria)
   "Lògica per a les bolles: Disparar si pot, o moure's intel·ligentment."
-  (let ((temps-pintar (if tr-pintar tr-pintar 0))
-        (temps-moure (if tr-moure tr-moure 0)))
+  (let ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
+        (temps-moure (cond (tr-moure tr-moure) (t 0))))
     (cond 
       ;; 1. Disparar (Prioritat 1)
       ((< temps-pintar 1)
@@ -142,9 +142,8 @@
              ;; Si és un Lab neutral/enemic o una Base enemiga, l'afegim (si no hi és ja)
               ((and element (not (eq equip-element el-meu-equip)) 
                    (or (eq element 'lab) (eq element 'base)))
-                (if (member coord mem-restant :test #'equal)
-                    mem-restant ;;si ja està en memoria retorna la memoria que ja tenim
-                (cons coord mem-restant)) ;;else retorna la cordenada nova + memoria que ja tenim
+                (cond ((member coord mem-restant :test #'equal) mem-restant)
+                      (t (cons coord mem-restant)))
               )
              
              ;; Si és un Lab NOSTRE (ja capturat), l'esborrem de la memòria perquè deixin d'anar-hi
@@ -158,7 +157,7 @@
   (cond ((null buides) nil)
         ((null (cdr buides)) (car buides))
         (t (let ((millor-resta (agent-xyz999-millor-pas (cdr buides) desti)))
-             (if (< (agent-xyz999-distancia-q (car buides) desti)
-                    (agent-xyz999-distancia-q millor-resta desti))
-                 (car buides)
-                 millor-resta)))))
+             (cond ((< (agent-xyz999-distancia-q (car buides) desti)
+                       (agent-xyz999-distancia-q millor-resta desti))
+                    (car buides))
+                   (t millor-resta))))))

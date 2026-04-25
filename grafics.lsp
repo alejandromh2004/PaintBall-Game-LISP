@@ -63,7 +63,7 @@
          (cond 
            ;; --- BASE ---
            ((eq element 'base)
-            (if (eq equip 'e1) (PINK) (BLACK))
+            (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
             (moverel 2 2)
             (quadrat (- m 5))
             (moverel -2 -2))
@@ -87,7 +87,7 @@
             (quadrat (- m 7))
             
             ;; B. El centre de la bolla ens diu de quin equip és
-            (if (eq equip 'e1) (PINK) (BLACK))
+            (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
             (moverel 1 1)
             (quadrat (- m 9))
             

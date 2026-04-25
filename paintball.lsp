@@ -7,7 +7,7 @@
 ;; <Descripció de les funcions d'aquest fitxer>
 
 ;; Necessari per a l'optimització de crides recursives.
-(if (not (boundp '*features*)) (setq *features* nil))
+(cond ((not (boundp '*features*)) (setq *features* nil)))
 (load "proyectos/projecte_inicial/common.lsp") ; https://almy.us/files/xl305req.zip
 (load "proyectos/projecte_inicial/tco.lsp")    ; https://github.com/antoni-oliver/defun-tco
 
@@ -116,11 +116,11 @@
                                    (t 'e2)))
                 
                 ;; 1. Sumem la pintura passiva
-                (pint-e1-inici (if (eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1)) pint-e1))
-                (pint-e2-inici (if (eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2)) pint-e2))
+                (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
+                (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2)))
                 
-                (pintura-actual-equip (if (eq equip-actiu 'e1) pint-e1-inici pint-e2-inici))
-                (memoria-actual-equip (if (eq equip-actiu 'e1) mem-e1 mem-e2))
+                (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici)))
+                (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
                 
                 ;; 1.5. APLIQUEM EL DESCANS!
                 (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
@@ -135,10 +135,10 @@
                 (nova-pintura-equip (cadr estat-resultant))
                 (nova-memoria-equip (caddr estat-resultant))
                 
-                (nova-pint-e1 (if (eq equip-actiu 'e1) nova-pintura-equip pint-e1-inici))
-                (nova-pint-e2 (if (eq equip-actiu 'e2) nova-pintura-equip pint-e2-inici))
-                (nova-mem-e1 (if (eq equip-actiu 'e1) nova-memoria-equip mem-e1))
-                (nova-mem-e2 (if (eq equip-actiu 'e2) nova-memoria-equip mem-e2)))
+                (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici)))
+                (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
+                (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
+                (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2))))
            
            ;; 4. PAUSA MANUAL CLÀSSICA
            (BLACK)
@@ -350,7 +350,7 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (< (if (nth 7 casella-origen) (nth 7 casella-origen) 0) 1)
+                (cond ((and (< (cond ((nth 7 casella-origen) (nth 7 casella-origen)) (t 0)) 1)
                             (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2)
                             (eq (car casella-desti) 'terra)
                             (null (caddr casella-desti)))
@@ -364,8 +364,8 @@
                               
                               (es-diagonal (= (+ (* (- dest-x orig-x) (- dest-x orig-x))
                                                  (* (- dest-y orig-y) (- dest-y orig-y))) 2))
-                              (tr-base (if es-diagonal 1.4142 1))
-                              (nou-tr-moure (if (eq color-terra-dest color-propi) tr-base (* tr-base 3)))
+                              (tr-base (cond (es-diagonal 1.4142) (t 1)))
+                              (nou-tr-moure (cond ((eq color-terra-dest color-propi) tr-base) (t (* tr-base 3))))
                               
                               (origen-buit (list 'terra color-terra-orig nil nil nil nil nil nil))
                               (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-buit))
@@ -388,14 +388,14 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (< (if (nth 6 casella-origen) (nth 6 casella-origen) 0) 1)
+                (cond ((and (< (cond ((nth 6 casella-origen) (nth 6 casella-origen)) (t 0)) 1)
                             (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 5)
                             (eq (car casella-desti) 'terra))
                        (let* ((color-terra-orig (cadr casella-origen))
                               (equip-tirador (cadddr casella-origen))
                               (color-tirador (nth 5 casella-origen))
                               
-                              (nou-tr-pintar (if (eq color-terra-orig color-tirador) 1 3))
+                              (nou-tr-pintar (cond ((eq color-terra-orig color-tirador) 1) (t 3)))
                               
                               (origen-actualitzat (list 'terra color-terra-orig 'bolla equip-tirador
                                                         (nth 4 casella-origen) color-tirador 
@@ -411,11 +411,10 @@
                               (tr-m-desti (nth 7 casella-desti))
                               
                               (nous-colors-desti 
-                               (if (and element-desti (not (eq element-desti 'lab)))
-                                   (if (member color-tirador colors-desti)
-                                       colors-desti
-                                       (cons color-tirador colors-desti))
-                                   colors-desti))
+                               (cond ((and element-desti (not (eq element-desti 'lab)))
+                                      (cond ((member color-tirador colors-desti) colors-desti)
+                                            (t (cons color-tirador colors-desti))))
+                                     (t colors-desti)))
                               
                               (colors-totals (cons color-propi-desti nous-colors-desti))
                               
