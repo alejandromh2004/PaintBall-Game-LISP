@@ -250,13 +250,13 @@
 (defun agent-xyz999-tria-color-bolla (colors-base-enemy pintura ronda)
   "Tria quin color de bolla crear per maximitzar el dany a la base enemiga.
    Si es coneix la base enemiga, crea el color que li falta.
-   Sinó, rota r-g-b cada 10 torns per diversificar l'exèrcit."
+   Sinó, alterna r-g-b cada torn per diversificar l'exèrcit."
   (let ((falten (agent-xyz999-colors-falten colors-base-enemy)))
     (cond 
       ;; Si hi ha colors que falten a la base enemiga, crea'n un dels que falten
       ((and colors-base-enemy (not (null falten))) (car falten))
-      ;; Si la base enemiga és desconeguda, rotem colors per ronda
-      (t (nth (rem (floor (/ ronda 10)) 3) '(r g b))))))
+      ;; Si la base enemiga és desconeguda, alternem r-g-b cada torn
+      (t (nth (rem ronda 3) '(r g b))))))
 
 
 ;; ======================================================================
@@ -288,28 +288,30 @@
 ;; SECCIÓ 8: SISTEMA DE NAVEGACIÓ GREEDY
 ;; ======================================================================
 
-(defun agent-xyz999-cost-pas (casella desti color-propi visited)
+(defun agent-xyz999-cost-pas (casella desti color-propi visited ignora-rastre)
   "Cost heurístic d'un pas: distància al destí + penalització si no és del propi color.
-   També afegeix una penalització alta si la casella ja ha estat visitada."
+   Si ignora-rastre és nil, aplica penalització de visited per explorar."
   (let* ((coord (agent-xyz999-vis-coord casella))
          (color-terra (agent-xyz999-vis-color-terra casella))
          (dist (agent-xyz999-dist-q coord desti))
-         ;; Penalització alta si terra d'altre color
+         ;; Penalització alta si terra d'altre color (x3 cooldown real)
          (pena-color (cond ((eq color-terra color-propi) 0) (t 500)))
-         ;; Penalització de rastre: per no repetir camins (Exploració)
-         (pena-rastre (cond ((agent-xyz999-membre-igual coord visited) 2000) (t 0))))
+         ;; Penalització de rastre: Només s'aplica si NO estem en "mode atac/rush"
+         (pena-rastre (cond ((and (not ignora-rastre)
+                                  (agent-xyz999-membre-igual coord visited)) 2000)
+                            (t 0))))
     (+ (* dist 10) pena-color pena-rastre)))
 
-(defun agent-xyz999-millor-pas (movibles desti color-propi visited millor-coord millor-cost)
+(defun agent-xyz999-millor-pas (movibles desti color-propi visited ignora-rastre millor-coord millor-cost)
   "Cerca greedy la casella movible de menor cost cap al destí."
   (cond ((null movibles) millor-coord)
         (t (let* ((casella (car movibles))
-                  (cost (agent-xyz999-cost-pas casella desti color-propi visited)))
+                  (cost (agent-xyz999-cost-pas casella desti color-propi visited ignora-rastre)))
              (cond ((< cost millor-cost)
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited
+                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited ignora-rastre
                                              (agent-xyz999-vis-coord casella) cost))
                    (t
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited
+                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited ignora-rastre
                                              millor-coord millor-cost)))))))
 
 
@@ -337,49 +339,43 @@
           (+ by (* (cadr dir) dist)))))
 
 (defun agent-xyz999-desti-bolla (coord mem id-unitat ronda equip visio rol)
-  "Decideix cap a on ha d'anar una bolla segons el seu rol i la situació.
-   Prioritat: objectiu visible > memòria (base/lab) > explorar."
+  "Decideix cap a on ha d'anar una bolla.
+   PRIORITAT: Base enemiga > Objectiu visible > Labs en memòria > Explorar."
   (let* ((base-enemy (agent-xyz999-get-mem 'base-enemy mem))
-         (base-ally  (agent-xyz999-get-mem 'base-ally mem))
          (labs       (agent-xyz999-get-mem 'labs mem))
-         ;; Objectiu visible proper (base o lab enemic en visió directa)
          (proper-vis (agent-xyz999-busca-objectiu-visio visio equip coord))
-         (n-labs (agent-xyz999-longitud labs))
-         (lab-assignat (cond ((and labs (> n-labs 0))
-                              (agent-xyz999-nth-safe 
-                               (rem (agent-xyz999-abs id-unitat) n-labs) labs))
-                             (t nil))))
+         (n-labs (agent-xyz999-longitud labs)))
     (cond
-      ;; DEFENSOR: resta prop de la base aliada
-      ((eq rol 'defensor)
-       (cond (base-ally (list (+ (car base-ally) 2) (+ (cadr base-ally) 2)))
-             (t (agent-xyz999-vector-exploracio id-unitat ronda coord))))
+      ;; 1. Si coneixem la BASE ENEMIGA, anem-hi (Rush)!
+      (base-enemy base-enemy)
       
-      ;; ATACANT: va cap a la base enemiga si la coneix
-      ((eq rol 'atacant)
-       (cond (proper-vis proper-vis)
-             (base-enemy base-enemy)
-             (lab-assignat lab-assignat)
-             (t (agent-xyz999-vector-exploracio id-unitat ronda coord))))
+      ;; 2. Si veiem quelcom interessant (Base o Lab) ara mateix
+      (proper-vis proper-vis)
       
-      ;; EXPLORADOR: va a labs desconeguts o explora
-      (t
-       (cond (proper-vis proper-vis)
-             (lab-assignat lab-assignat)
-             (t (agent-xyz999-vector-exploracio id-unitat ronda coord)))))))
+      ;; 3. Si coneixem laboratoris, anem-hi per ID per dispersar-nos
+      ((and labs (> n-labs 0))
+       (agent-xyz999-nth-safe (rem (agent-xyz999-abs id-unitat) n-labs) labs))
+      
+      ;; 4. Altrament, exploració dispersa
+      (t (agent-xyz999-vector-exploracio id-unitat ronda coord)))))
 
-(defun agent-xyz999-busca-objectiu-visio (visio equip coord-actual)
-  "Busca el primer objectiu rellevant (base o lab enemic) en el camp de visió."
+(defun agent-xyz999-filtra-visio-tipus (visio tipus equip)
+  "Filtra caselles de la visió per tipus d'element (enemic o neutral)."
   (cond ((null visio) nil)
         (t (let* ((c (car visio))
                   (elem (agent-xyz999-vis-element c))
-                  (eq-c (agent-xyz999-vis-equip c))
-                  (coord-c (agent-xyz999-vis-coord c)))
-             (cond ((and elem
-                         (not (eq eq-c equip))
-                         (or (eq elem 'base) (eq elem 'lab)))
-                    coord-c)
-                   (t (agent-xyz999-busca-objectiu-visio (cdr visio) equip coord-actual)))))))
+                  (eq-c (agent-xyz999-vis-equip c)))
+             (cond ((and (eq elem tipus) (not (eq eq-c equip)))
+                    (cons c (agent-xyz999-filtra-visio-tipus (cdr visio) tipus equip)))
+                   (t (agent-xyz999-filtra-visio-tipus (cdr visio) tipus equip)))))))
+
+(defun agent-xyz999-busca-objectiu-visio (visio equip coord-actual)
+  "Busca el millor objectiu rellevant en visió. Prioritat: BASE > LAB."
+  (let ((bases (agent-xyz999-filtra-visio-tipus visio 'base equip))
+        (labs  (agent-xyz999-filtra-visio-tipus visio 'lab equip)))
+    (cond (bases (agent-xyz999-vis-coord (car bases)))
+          (labs  (agent-xyz999-vis-coord (car labs)))
+          (t nil))))
 
 
 ;; ======================================================================
@@ -471,10 +467,9 @@
 ;; ======================================================================
 
 (defun agent-xyz999-millor-spawn (movibles desti visited)
-  "Troba la casella de spawn més propera al destí (la base vol llançar bolles
-   en la direcció de l'enemic)."
+  "Troba la casella de spawn més propera al destí."
   (cond ((null movibles) nil)
-        (t (agent-xyz999-millor-pas movibles desti 'cap visited nil 1000000000))))
+        (t (agent-xyz999-millor-pas movibles desti 'cap visited t nil 1000000000))))
 
 (defun agent-xyz999-decisio-base (coord visio mem equip pintura ronda)
   "Decisió de la base: crea una bolla si té prou pintura.
@@ -558,9 +553,15 @@
          (desti (cond (en-perill (agent-xyz999-desti-fugida coord mem equip))
                       (t (agent-xyz999-desti-bolla coord mem id-unitat ronda equip visio rol))))
          
+         ;; Si tenim un destí conegut (base enemiga o lab), ignorem el rastre per rushejar
+         (ignora-rastre (cond (en-perill nil)
+                              ((agent-xyz999-get-mem 'base-enemy mem) t)
+                              ((agent-xyz999-busca-objectiu-visio visio equip coord) t)
+                              (t nil)))
+         
          (acc-mou (cond ((< temps-moure 1)
                          (let* ((movibles (agent-xyz999-filtra-movibles visio coord))
-                                (millor (agent-xyz999-millor-pas movibles desti color-propi visited nil 1000000000)))
+                                (millor (agent-xyz999-millor-pas movibles desti color-propi visited ignora-rastre nil 1000000000)))
                            (cond (millor (list (list 'mou (list millor))))
                                  (t nil))))
                         (t nil))))
