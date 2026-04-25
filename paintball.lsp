@@ -40,8 +40,8 @@
 ;; Altres fitxers de la pràctica:
 (load "proyectos/projecte_inicial/funciones_auxiliares.lsp")
 (load "proyectos/projecte_inicial/grafics.lsp")
-(load "proyectos/projecte_inicial/agent-abc123")
-(load "proyectos/projecte_inicial/agent-xyz999")
+(load "proyectos/projecte_inicial/agent-abc123.lsp")
+(load "proyectos/projecte_inicial/agent-xyz999.lsp")
 
 
 (defun inici ()
@@ -82,10 +82,12 @@
                 ;; Bases comencen sense estar pintades de cap color (nil)
                 ;; Bolles comencen pintades NOMÉS del seu color (list color-propi)
                 (colors-inicials (cond ((eq tipus 'base) nil)
-                                       (t (list color-propi)))))
+                                       (t (list color-propi))))
+                ;; L'ID ha de ser un enter únic: usem (ronda * 100000) + (y * 1000) + x
+                (id-unitat (+ (* y 1000) x)))
            (list 'terra (cadr casella) tipus (cadddr casella) 
                  colors-inicials color-propi (nth 6 casella) (nth 7 casella) 
-                 (list 0 x y))))
+                 id-unitat)))
         (t casella)))
 
 (defun prepara-fila-inicial (fila x y)
@@ -407,7 +409,8 @@
                             (>= pintura 50))
                        (let* ((casella-vella (indexa-matriu mapa dest-y dest-x))
                               (color-terra (cadr casella-vella))
-                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 (list ronda dest-x dest-y)))
+                              (id-unitat (+ (* ronda 100000) (+ (* dest-y 1000) dest-x)))
+                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 id-unitat))
                               (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella))
                               (nova-pintura (- pintura 50)))
                          (aplica-accions (cdr accions) nou-mapa nova-pintura equip coord-origen ronda dx dy)))
@@ -417,7 +420,7 @@
              ;; ACCIÓ: MOU
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'mou)
-              (let* ((coord-desti-des args)
+              (let* ((coord-desti-des (car args))
                      (dest-x (- (car coord-desti-des) dx))
                      (dest-y (- (cadr coord-desti-des) dy))
                      (orig-x (car coord-origen))
@@ -455,7 +458,7 @@
              ;; ACCIÓ: PINTA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'pinta)
-              (let* ((coord-desti-des args) 
+              (let* ((coord-desti-des (car args)) 
                      (dest-x (- (car coord-desti-des) dx))
                      (dest-y (- (cadr coord-desti-des) dy))
                      (orig-x (car coord-origen))

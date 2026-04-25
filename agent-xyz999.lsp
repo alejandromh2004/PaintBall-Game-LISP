@@ -82,7 +82,7 @@
       ((< temps-pintar 1)
        (let ((objectius (agent-xyz999-busca-objectius coord equip visio)))
          (cond ((not (null objectius))
-                (list (list 'pinta (car objectius))))
+                (list (list 'pinta (list (car objectius)))))
                (t (agent-xyz999-intentar-moure coord temps-moure visio memoria)))))
       
       ;; 2. Moure's
@@ -94,13 +94,12 @@
          (let ((buides (agent-xyz999-busca-caselles-buides-adj coord visio)))
            (cond ((null buides) nil)
                  (memoria
-                  ;; INTEL·LIGÈNCIA: Tenim un objectiu a la llibreta! Anem cap a ell.
                   (let ((millor-casella (agent-xyz999-millor-pas buides (car memoria))))
-                    (list (list 'mou millor-casella))))
+                    (list (list 'mou (list millor-casella)))))
                  (t
                   ;; EXPLORACIÓ: La memòria està buida, busquem a l'atzar.
                   (let ((casella-aleatoria (nth (random (length buides)) buides)))
-                    (list (list 'mou casella-aleatoria)))))))
+                    (list (list 'mou (list casella-aleatoria))))))))
         (t nil)))
 ;; ----------------------------------------------------------------------
 ;; PUNT D'ENTRADA PRINCIPAL

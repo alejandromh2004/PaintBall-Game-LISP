@@ -83,8 +83,8 @@
       ((< temps-pintar 1)
        (let ((objectius (agent-abc123-busca-objectius coord equip visio)))
          (cond ((not (null objectius))
-                ;; Disparem al primer objectiu que veiem
-                (list (list 'pinta (car objectius))))
+                ;; Disparem al primer objectiu que veiem (l'argument ha de ser una llista)
+                (list (list 'pinta (list (car objectius)))))
                (t 
                 ;; Si no hi ha objectius, intentem moure'ns
                 (agent-abc123-intentar-moure coord temps-moure visio)))))
@@ -97,9 +97,9 @@
   (cond ((< temps-moure 1)
          (let ((buides (agent-abc123-busca-caselles-buides-adj coord visio)))
            (cond ((not (null buides))
-                  ;; TRUC D'INTEL·LIGÈNCIA: Triem una casella buida a l'atzar!
+                  ;; TRUC D'INTEL·LIGÈNCIA: Triem una casella buida a l'atzar! (L'argument ha de ser una llista)
                   (let ((casella-aleatoria (nth (random (length buides)) buides)))
-                    (list (list 'mou casella-aleatoria))))
+                    (list (list 'mou (list casella-aleatoria)))))
                  (t nil))))
         (t nil)))
 
