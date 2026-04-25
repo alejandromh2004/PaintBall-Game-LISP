@@ -278,15 +278,15 @@
                       (cdr labs) coord best-coord best-dist)))))))
 
 (defun agent-xyz999-vector-exploracio (id ronda base-ally)
-  "Genera un punt d'exploració llunyà en una direcció FIXA per ID.
-   Distància 1000u per assegurar que la bolla travessa tot el mapa.
-   SenseRotació per fases: cada unitat té la seva pròpia direcció permanent
-   → no hi ha canvis bruscos que causin l'òrbita al voltant de la base.
-   id: enter. ronda: enter (no usat, mantingut per compatibilitat). base-ally: (x y) o nil."
-  (let* ((dir8  '((1 0)(1 1)(0 1)(-1 1)(-1 0)(-1 -1)(0 -1)(1 -1)))
-         ;; Direcció FIXA basada en ID: sense fase rotativa
-         (idx   (rem (agent-xyz999-abs id) 8))
-         (dir   (agent-xyz999-nth-safe idx dir8))
+  "Genera un punt d'exploració llunyà en una direcció que canvia periòdicament.
+   Canvia cada 15 rondes per evitar quedar-se bloquejat en parets.
+   id: enter. ronda: enter. base-ally: (x y) o nil."
+  (let* (;; 16 direccions per a una millor dispersió
+         (dirs  '((1 0)(1 1)(0 1)(-1 1)(-1 0)(-1 -1)(0 -1)(1 -1)
+                  (2 1)(1 2)(-1 2)(-2 1)(-2 -1)(-1 -2)(1 -2)(2 -1)))
+         (fase  (truncate (/ ronda 15)))
+         (idx   (rem (+ (agent-xyz999-abs id) fase) 16))
+         (dir   (agent-xyz999-nth-safe idx dirs))
          (bx    (cond ((and base-ally (car base-ally)) (car base-ally)) (t 500)))
          (by    (cond ((and base-ally (cadr base-ally)) (cadr base-ally)) (t 500))))
     (cond ((null dir) (list bx by))
@@ -310,21 +310,17 @@
       ;; ROL 0 - ATACANT: rush directe a base enemiga si la coneix
       ((and (= rol 0) base-enemy) base-enemy)
 
-      ;; ROL 1 - CHASSADOR: va al lab MÉS PROPER (CORRECCIÓ: era nth-safe per ID)
+      ;; ROL 1 - CHASSADOR: va al lab MÉS PROPER (enemics/neutrals)
       ((and (= rol 1) (> n-labs 0))
        (agent-xyz999-lab-mes-proper labs coord nil 1000000))
 
-      ;; ROL 1 - CHASSADOR sense labs enemics: defensa lab aliat MÉS PROPER
-      ((and (= rol 1) (> n-labs-a 0))
-       (agent-xyz999-lab-mes-proper labs-a coord nil 1000000))
-
-      ;; ROL 1 - CHASSADOR sense labs: s'uneix a l'atac
+      ;; ROL 1 - CHASSADOR sense labs: s'uneix a l'atac o explora (NO es queda als labs aliats)
       ((and (= rol 1) base-enemy) base-enemy)
 
       ;; ROL 2 - EXPLORADOR: si base visible, s'uneix a l'atac
       ((and (= rol 2) base-enemy) base-enemy)
 
-      ;; TOTS: explorar en la direcció fixa assignada per ID
+      ;; TOTS: explorar en la direcció dinàmica assignada
       (t (agent-xyz999-vector-exploracio id ronda base-ally)))))
 
 
