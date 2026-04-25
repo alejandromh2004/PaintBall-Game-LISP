@@ -1,6 +1,18 @@
 ;; ======================================================================
-;; AGENT INTEL·LIGENT ABC123
+;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
+;; Estudiant: ABC
+;; Data: 25/04/2026
+;; Assignatura: Llenguatges de Programació (LP)
+;; Grup: <Indicar Grup>
+;; Professors: <Indicar Professors>
+;; Convocatòria: Primera Convocatòria (Ordinària)
+;;
+;; ----------------------------------------------------------------------
+;; FITXER: agent-abc123.lsp
+;; DESCRIPCIÓ: Agent intel·ligent bàsic. Implementa una lògica reactiva
+;; de disparar a objectius visibles o moure's aleatòriament si no n'hi ha.
+;; ----------------------------------------------------------------------
 
 ;; ----------------------------------------------------------------------
 ;; FUNCIONS AUXILIARS (Totes amb el prefix agent-abc123-)

@@ -1,9 +1,18 @@
-;; Pràctica final de Llenguatges de Programació.
-;; LISP - Paintball.
-;; Estudiants: ABC, XYZ.
-;; Professor: XXX.
-;; Lliurament: primera convocatòria.
-;; Fitxer del mòdul gràfic.
+;; ======================================================================
+;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
+;; ======================================================================
+;; Estudiants: ABC, XYZ
+;; Data: 25/04/2026
+;; Assignatura: Llenguatges de Programació (LP)
+;; Grup: <Indicar Grup>
+;; Professors: <Indicar Professors>
+;; Convocatòria: Primera Convocatòria (Ordinària)
+;;
+;; ----------------------------------------------------------------------
+;; FITXER: grafics.lsp
+;; DESCRIPCIÓ: Mòdul de representació gràfica de la partida. S'encarrega
+;; de dibuixar el mapa, les unitats i la informació d'estat a la finestra.
+;; ----------------------------------------------------------------------
 
 ;; Variables globals per al dibuix (mida de la casella)
 (setq m 15) 

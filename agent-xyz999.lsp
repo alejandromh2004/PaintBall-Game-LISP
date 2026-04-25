@@ -1,6 +1,19 @@
 ;; ======================================================================
-;; AGENT INTEL·LIGENT XYZ999
+;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
+;; Estudiant: XYZ
+;; Data: 25/04/2026
+;; Assignatura: Llenguatges de Programació (LP)
+;; Grup: <Indicar Grup>
+;; Professors: <Indicar Professors>
+;; Convocatòria: Primera Convocatòria (Ordinària)
+;;
+;; ----------------------------------------------------------------------
+;; FITXER: agent-xyz999.lsp
+;; DESCRIPCIÓ: Agent intel·ligent avançat. Fa ús de la memòria compartida
+;; per coordinar objectius entre unitats de l'equip. Implementa una 
+;; estratègia d'exploració i setge de bases enemigues.
+;; ----------------------------------------------------------------------
 
 ;; ----------------------------------------------------------------------
 ;; FUNCIONS AUXILIARS (Totes amb el prefix agent-xyz999-)

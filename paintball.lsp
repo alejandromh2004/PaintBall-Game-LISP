@@ -1,10 +1,36 @@
-;; Pràctica final de Llenguatges de Programació.
-;; LISP - Paintball.
-;; Estudiants: ABC, XYZ.
-;; Professor: XXX.
-;; Lliurament: primera convocatòria.
-;; Fitxer del controlador principal.
-;; <Descripció de les funcions d'aquest fitxer>
+;; ======================================================================
+;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
+;; ======================================================================
+;; Estudiants: ABC, XYZ
+;; Data: 25/04/2026
+;; Assignatura: Llenguatges de Programació (LP)
+;; Grup: <Indicar Grup>
+;; Professors: <Indicar Professors>
+;; Convocatòria: Primera Convocatòria (Ordinària)
+;;
+;; ----------------------------------------------------------------------
+;; FITXER: paintball.lsp
+;; DESCRIPCIÓ: Controlador principal del joc. Gestiona el bucle de 
+;; partida, l'alternança de torns, l'execució d'accions dels agents,
+;; la validació de regles i les condicions de victòria.
+;;
+;; INSTRUCCIONS D'ÚS:
+;; 1. Carregar el fitxer: (load "paintball.lsp")
+;; 2. Iniciar la partida: (inici)
+;; 
+;; DISSENY FUNCIONAL:
+;; S'ha seguit un enfocament purament funcional. L'estat del joc es
+;; passa com a paràmetre en les crides recursives. S'ha fet ús de
+;; l'optimització de crides en posició final (TCO) per permetre 
+;; partides de llarga durada sense desbordament de pila.
+;;
+;; ASPECTES OPCIONALS IMPLEMENTATS:
+;; - Sistema d'identificadors únics (id-unitat) per a cada unitat.
+;; - Validació estricta de rangs i cooldowns en el controlador.
+;; - Coordenades desplazades aleatòriament (anti-deducció de mapa).
+;; - Memòria compartida funcional entre unitats del mateix equip.
+;; - Límit de 1500 torns amb sistema de finalització.
+;; ----------------------------------------------------------------------
 
 ;; Necessari per a l'optimització de crides recursives.
 (cond ((not (boundp '*features*)) (setq *features* nil)))
