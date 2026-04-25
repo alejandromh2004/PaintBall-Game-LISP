@@ -97,12 +97,12 @@
   "Retorna (accio nova-memoria) o (nil nova-memoria)."
   (let* ((equip (nth 1 dades))
          (pintura (nth 2 dades))
-         (tipus-unitat (nth 3 dades))
-         (coord (nth 4 dades))
-         (tr-pintar (nth 7 dades))
-         (tr-moure (nth 8 dades))
-         (visio (nth 9 dades))
-         (memoria-antiga (nth 10 dades)) 
+         (tipus-unitat (nth 4 dades))
+         (coord (nth 5 dades))
+         (tr-pintar (nth 8 dades))
+         (tr-moure (nth 9 dades))
+         (visio (nth 10 dades))
+         (memoria-antiga (nth 11 dades)) 
          
          ;; 1. La unitat llegeix la visió i apunta/esborra coses a la llibreta
          (memoria-nova (agent-xyz999-actualitza-memoria visio memoria-antiga equip))

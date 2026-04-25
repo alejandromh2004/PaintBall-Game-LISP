@@ -11,12 +11,13 @@
 ; (unintern sym) - remove a symbol from the oblist
 #-:packages
 (defun unintern (symbol)
-  (let ((subhash (hash symbol (length *obarray*))))
-    (cond ((member symbol (aref *obarray* subhash))
-             (setf (aref *obarray* subhash)
-                   (delete symbol (aref *obarray* subhash)))
-             t)
-          (t nil))))
+  (if (boundp '*obarray*)
+      (let ((subhash (hash symbol (length *obarray*))))
+        (cond ((member symbol (aref *obarray* subhash))
+                 (setf (aref *obarray* subhash)
+                       (delete symbol (aref *obarray* subhash)))
+                 t)
+              (t nil)))))
 
 (export '(pairlis copy-list copy-alist copy-tree signum))
 

@@ -7,6 +7,7 @@
 ;; <Descripció de les funcions d'aquest fitxer>
 
 ;; Necessari per a l'optimització de crides recursives.
+(if (not (boundp '*features*)) (setq *features* nil))
 (load "proyectos/projecte_inicial/common.lsp") ; https://almy.us/files/xl305req.zip
 (load "proyectos/projecte_inicial/tco.lsp")    ; https://github.com/antoni-oliver/defun-tco
 
@@ -43,22 +44,43 @@
 
 
 ;; ======================================================================
+;; GESTIÓ D'IDENTIFICADORS ÚNICS (Bug 3)
+;; ======================================================================
+
+(defun prepara-casella-inicial (casella x y)
+  "Afegeix un ID únic (0 x y) a les unitats inicials del mapa."
+  (cond ((and (eq (car casella) 'terra) 
+              (or (eq (caddr casella) 'base) (eq (caddr casella) 'bolla)))
+         (list 'terra (cadr casella) (caddr casella) (cadddr casella) 
+               (nth 4 casella) (nth 5 casella) (nth 6 casella) (nth 7 casella) 
+               (list 0 x y)))
+        (t casella)))
+
+(defun prepara-fila-inicial (fila x y)
+  (cond ((null fila) nil)
+        (t (cons (prepara-casella-inicial (car fila) x y)
+                 (prepara-fila-inicial (cdr fila) (+ x 1) y)))))
+
+(defun prepara-mapa-inicial (mapa y)
+  (cond ((null mapa) nil)
+        (t (cons (prepara-fila-inicial (car mapa) 0 y)
+                 (prepara-mapa-inicial (cdr mapa) (+ y 1))))))
+
+
+;; ======================================================================
 ;; CONTROLADOR GENERAL
 ;; ======================================================================
 
 (defun inicia-partida (mapa-inicial)
   "Prepara l'estat inicial i llança el bucle principal de la partida."
-  ;; L'estat inicial és:
-  ;; - Ronda: 1
-  ;; - Mapa: el que hem carregat del fitxer
-  ;; - Pintura E1: 200
-  ;; - Pintura E2: 200
-  ;; - Memòria E1: nil (buida)
-  ;; - Memòria E2: nil (buida)
-  (bucle-partida 1 mapa-inicial 200 200 nil nil))
+  ;; Generem el desplazamiento aleatori fix per a tota la partida (Bug 6)
+  (let ((dx (random 1000))
+        (dy (random 1000)))
+    (format t "~%[SISTEMA] Coordenades desplazades per dx=~A, dy=~A~%" dx dy)
+    (bucle-partida 1 (prepara-mapa-inicial mapa-inicial 0) 200 200 nil nil dx dy)))
 
 
-(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy)
   "El motor principal del joc. S'executa recursivament a cada torn."
   
   (dibuixa-mapa mapa)
@@ -107,7 +129,7 @@
                 (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
                 
                 ;; 3. Processem accions
-                (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip))
+                (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy))
                 
                 (nou-mapa (car estat-resultant))
                 (nova-pintura-equip (cadr estat-resultant))
@@ -123,13 +145,15 @@
            (format t ">> TECLA 'Enter' PER PASSAR AL SEGUENT TORN")
            (read-line)
            
-           ;; 5. Crida recursiva neta (només amb els 6 paràmetres originals)
+           ;; 5. Crida recursiva neta (ara amb dx i dy)
            (bucle-partida (+ ronda 1) 
                           nou-mapa 
                           nova-pint-e1 
                           nova-pint-e2 
                           nova-mem-e1 
-                          nova-mem-e2)))))
+                          nova-mem-e2
+                          dx
+                          dy)))))
 
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
@@ -192,43 +216,43 @@
   (+ (* (- ax bx) (- ax bx))
      (* (- ay by) (- ay by))))
 
-(defun formateja-casella (coord casella)
+(defun formateja-casella (coord casella dx dy)
   "Adapta la informació d'una casella del mapa al format que demana l'enunciat per a la visió."
-  (let ((tipus-casella (car casella)))
+  (let ((tipus-casella (car casella))
+        (coord-despla (list (+ (car coord) dx) (+ (cadr coord) dy))))
     (cond ((eq tipus-casella 'aigua)
            ;; L'aigua només necessita coordenada i tipus
-           (list coord 'aigua))
+           (list coord-despla 'aigua))
           (t
            ;; La terra necessita tota la informació de l'element que hi ha a sobre
            (let ((color-casella (cadr casella))
                  (element (caddr casella))
                  (equip (cadddr casella)))
-             ;; Retornem: (coord tipus color element equip colors-pintat color-propi tr-pintar tr-moure)
-             ;; Nota: Deixem els últims 4 valors a NIL temporalment fins que implementem els cooldowns i danys.
-             (list coord tipus-casella color-casella element equip nil nil nil nil))))))
+             ;; Retornem: (coord-despla tipus color element equip colors-pintat color-propi tr-pintar tr-moure)
+             (list coord-despla tipus-casella color-casella element equip nil nil nil nil))))))
 
-(defun visio-fila (fila origen-x origen-y rang x y)
+(defun visio-fila (fila origen-x origen-y rang x y dx dy)
   "Recorre una fila i retorna només les caselles que estan dins del rang de visió."
   (cond ((null fila) nil)
         ;; Si la distància al quadrat és menor o igual al rang, la casella és visible
         ((<= (distancia-quadrada origen-x origen-y x y) rang)
-         (cons (formateja-casella (list x y) (car fila))
-               (visio-fila (cdr fila) origen-x origen-y rang (+ x 1) y)))
+         (cons (formateja-casella (list x y) (car fila) dx dy)
+               (visio-fila (cdr fila) origen-x origen-y rang (+ x 1) y dx dy)))
         ;; Si no és visible, la ignorem i seguim amb la següent
-        (t (visio-fila (cdr fila) origen-x origen-y rang (+ x 1) y))))
+        (t (visio-fila (cdr fila) origen-x origen-y rang (+ x 1) y dx dy))))
 
-(defun visio-mapa (mapa origen-x origen-y rang y)
+(defun visio-mapa (mapa origen-x origen-y rang y dx dy)
   "Recorre tot el mapa i ajunta les caselles visibles en una única llista."
   (cond ((null mapa) nil)
-        (t (append (visio-fila (car mapa) origen-x origen-y rang 0 y)
-                   (visio-mapa (cdr mapa) origen-x origen-y rang (+ y 1))))))
+        (t (append (visio-fila (car mapa) origen-x origen-y rang 0 y dx dy)
+                   (visio-mapa (cdr mapa) origen-x origen-y rang (+ y 1) dx dy)))))
 
 
 ;; ======================================================================
 ;; EMPAQUETATGE I COMUNICACIÓ AMB ELS AGENTS
 ;; ======================================================================
 
-(defun empaqueta-dades-unitat (mapa ronda equip pintura memoria x y)
+(defun empaqueta-dades-unitat (mapa ronda equip pintura memoria x y dx dy)
   "Construeix la llista d'estat exacta que necessita l'agent per prendre decisions."
   ;; Recorda que a la teva funció indexa-matriu, el segon paràmetre és la fila (y) i el tercer la columna (x)
   (let* ((casella (indexa-matriu mapa y x))
@@ -245,15 +269,19 @@
                            ((eq tipus-unitat 'bolla) 20)
                            (t 0)))
                            
-         ;; Calculem què veu aquesta unitat des de la seva posició
-         (visio (visio-mapa mapa x y rang-visio 0)))
+         ;; Calculem què veu aquesta unitat des de la seva posició (aplicant dx/dy a la visió)
+         (visio (visio-mapa mapa x y rang-visio 0 dx dy))
+         
+         ;; Extraiem l'ID únic emmagatzemat a la casella (Bug 3)
+         (id-unitat (nth 8 casella)))
     
     ;; Retornem la llista estructurada exactament com demana l'enunciat
     (list ronda 
           equip 
           pintura 
+          id-unitat
           tipus-unitat 
-          (list x y) 
+          (list (+ x dx) (+ y dy)) ; coordenada desplazada
           colors-pintat 
           color-propi 
           tr-pintar 
@@ -264,7 +292,7 @@
 (defun demana-accions-agent (dades-empaquetades)
   "Crida a l'agent i unifica el format perquè tots retornin (accions memòria)."
   (let ((equip (cadr dades-empaquetades))
-        (memoria-actual (nth 10 dades-empaquetades))) ; Recuperem la memòria actual
+        (memoria-actual (nth 11 dades-empaquetades))) ; Recuperem la memòria actual (índex corregit)
     
     (cond 
       ;; Si és l'agent ANTIC (abc123), només retorna accions, així que li peguem la memòria nosaltres
@@ -281,7 +309,7 @@
 ;; PROCESSADOR D'ACCIONS
 ;; ======================================================================
 
-(defun-tco aplica-accions (accions mapa pintura equip coord-origen)
+(defun-tco aplica-accions (accions mapa pintura equip coord-origen ronda dx dy)
   "Aplica recursivament una llista d'accions retornant el nou (mapa pintura)."
   (cond ((null accions) (list mapa pintura))
         (t
@@ -296,30 +324,35 @@
              ((eq tipus-accio 'crea-bolla)
               (let* ((color-bolla (car args))
                      (coord-desti (cadr args))
-                     (dest-x (car coord-desti))
-                     (dest-y (cadr coord-desti)))
-                (cond ((>= pintura 50)
+                     (dest-x (- (car coord-desti) dx))
+                     (dest-y (- (cadr coord-desti) dy))
+                     (orig-x (car coord-origen))
+                     (orig-y (cadr coord-origen)))
+                (cond ((and (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2)
+                            (>= pintura 50))
                        (let* ((casella-vella (indexa-matriu mapa dest-y dest-x))
                               (color-terra (cadr casella-vella))
-                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0))
+                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 (list ronda dest-x dest-y)))
                               (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella))
                               (nova-pintura (- pintura 50)))
-                         (aplica-accions (cdr accions) nou-mapa nova-pintura equip coord-origen)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))
+                         (aplica-accions (cdr accions) nou-mapa nova-pintura equip coord-origen ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: MOU
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'mou)
-              (let* ((coord-desti args)
-                     (dest-x (car coord-desti))
-                     (dest-y (cadr coord-desti))
+              (let* ((coord-desti-des args)
+                     (dest-x (- (car coord-desti-des) dx))
+                     (dest-y (- (cadr coord-desti-des) dy))
                      (orig-x (car coord-origen))
                      (orig-y (cadr coord-origen))
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (eq (car casella-desti) 'terra)
+                (cond ((and (< (if (nth 7 casella-origen) (nth 7 casella-origen) 0) 1)
+                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2)
+                            (eq (car casella-desti) 'terra)
                             (null (caddr casella-desti)))
                        (let* ((color-terra-orig (cadr casella-origen))
                               (color-terra-dest (cadr casella-desti))
@@ -327,6 +360,7 @@
                               (colors-pintat (nth 4 casella-origen))
                               (color-propi (nth 5 casella-origen))
                               (tr-pintar (nth 6 casella-origen))
+                              (id-unitat (nth 8 casella-origen))
                               
                               (es-diagonal (= (+ (* (- dest-x orig-x) (- dest-x orig-x))
                                                  (* (- dest-y orig-y) (- dest-y orig-y))) 2))
@@ -336,25 +370,27 @@
                               (origen-buit (list 'terra color-terra-orig nil nil nil nil nil nil))
                               (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-buit))
                               
-                              (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure))
+                              (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure id-unitat))
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-ocupat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura equip coord-desti)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura equip (list dest-x dest-y) ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: PINTA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'pinta)
-              (let* ((coord-desti args) 
-                     (dest-x (car coord-desti))
-                     (dest-y (cadr coord-desti))
+              (let* ((coord-desti-des args) 
+                     (dest-x (- (car coord-desti-des) dx))
+                     (dest-y (- (cadr coord-desti-des) dy))
                      (orig-x (car coord-origen))
                      (orig-y (cadr coord-origen))
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((eq (car casella-desti) 'terra)
+                (cond ((and (< (if (nth 6 casella-origen) (nth 6 casella-origen) 0) 1)
+                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 5)
+                            (eq (car casella-desti) 'terra))
                        (let* ((color-terra-orig (cadr casella-origen))
                               (equip-tirador (cadddr casella-origen))
                               (color-tirador (nth 5 casella-origen))
@@ -363,7 +399,8 @@
                               
                               (origen-actualitzat (list 'terra color-terra-orig 'bolla equip-tirador
                                                         (nth 4 casella-origen) color-tirador 
-                                                        nou-tr-pintar (nth 7 casella-origen)))
+                                                        nou-tr-pintar (nth 7 casella-origen)
+                                                        (nth 8 casella-origen)))
                               (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-actualitzat))
                               
                               (element-desti (caddr casella-desti))
@@ -373,7 +410,6 @@
                               (tr-p-desti (nth 6 casella-desti))
                               (tr-m-desti (nth 7 casella-desti))
                               
-                              ;; Afegim el color del tret si no hi era ja
                               (nous-colors-desti 
                                (if (and element-desti (not (eq element-desti 'lab)))
                                    (if (member color-tirador colors-desti)
@@ -381,9 +417,6 @@
                                        (cons color-tirador colors-desti))
                                    colors-desti))
                               
-                              ;; ====================================================
-                              ;; NOVA LÒGICA D'EXPLOSIÓ: Sumem el color propi de la unitat
-                              ;; ====================================================
                               (colors-totals (cons color-propi-desti nous-colors-desti))
                               
                               (explota (and (member 'r colors-totals)
@@ -393,43 +426,40 @@
                               (desti-actualitzat 
                                (cond 
                                  (explota 
-                                  ;; BOOM!
                                   (list 'terra color-tirador nil nil nil nil nil nil))
                                  ((eq element-desti 'lab)
-                                  ;; LAB CAPTURAT!
                                   (list 'terra color-tirador 'lab equip-tirador nil nil nil nil))
                                  (t
-                                  ;; NO EXPLOTA o TERRA BUIDA
-                                  (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti))))
+                                  (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti (nth 8 casella-desti)))))
                               
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura equip coord-origen)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura equip coord-origen ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
              
              ;; ---------------------------------------------------------
              ;; IGNORAR ALTRES ACCIONS
              ;; ---------------------------------------------------------
-             (t (aplica-accions (cdr accions) mapa pintura equip coord-origen)))))))
+             (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))))
 
 
-(defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria)
+(defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria dx dy)
   "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
   (cond ((null unitats) (list mapa pintura memoria))
         (t
          (let* ((coord (car unitats))
                 (x (car coord))
                 (y (cadr coord))
-                ;; 1. Empaquetem el que veu aquesta unitat
-                (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y))
+                ;; 1. Empaquetem el que veu aquesta unitat (amb desplazamiento)
+                (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y dx dy))
                 
                 ;; 2. Cridem l'agent intel·ligent (que ara sempre retorna una llista de 2 elements)
                 (resposta-agent (demana-accions-agent dades))
                 (accions (car resposta-agent))        ;; El primer element són les accions
                 (nova-memoria (cadr resposta-agent))  ;; El segon element és la llibreta actualitzada!
                 
-                ;; 3. Apliquem les accions al mapa
-                (resultat-accions (aplica-accions accions mapa pintura equip coord))
+                ;; 3. Apliquem les accions al mapa (des-desplaçant abans)
+                (resultat-accions (aplica-accions accions mapa pintura equip coord ronda dx dy))
                 (mapa-post-accions (car resultat-accions))
                 (pintura-post-accions (cadr resultat-accions)))
            
@@ -440,7 +470,9 @@
                                        ronda 
                                        pintura-post-accions 
                                        equip 
-                                       nova-memoria)))))
+                                       nova-memoria
+                                       dx
+                                       dy)))))
 
 
 ;; ======================================================================
@@ -468,7 +500,8 @@
            (cond ((and element (eq equip-casella equip))
                   (list 'terra color-terra element equip-casella colors-pintat color-propi 
                         (decrementa-temps tr-pintar) 
-                        (decrementa-temps tr-moure)))
+                        (decrementa-temps tr-moure)
+                        (nth 8 casella)))
                  (t casella)))) ; Si no és de l'equip o està buida, no la toquem
         (t casella)))
 
