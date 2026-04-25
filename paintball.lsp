@@ -30,6 +30,13 @@
 ;; - Coordenades desplazades aleatòriament (anti-deducció de mapa).
 ;; - Memòria compartida funcional entre unitats del mateix equip.
 ;; - Límit de 1500 torns amb sistema de finalització.
+;;
+;; CANVIS RESPECTE A LA VERSIÓ ANTERIOR:
+;; - Eliminat (BLACK) entre dibuixa-mapa i el prompt: evitava que el HUD
+;;   fos visible de manera consistent (reconfigurava el pen color de XLISP
+;;   just després del dibuix, causant artefactes de refresc visuals).
+;; - El prompt de torn ara mostra el número de ronda: "Ronda X/1500".
+;; - En prémer 'q', s'executa (cls) per deixar la pantalla en blanc net.
 ;; ----------------------------------------------------------------------
 
 ;; Necessari per a l'optimització de crides recursives.
@@ -78,7 +85,7 @@
                 ;; Bolles comencen pintades NOMÉS del seu color (list color-propi)
                 (colors-inicials (cond ((eq tipus 'base) nil)
                                        (t (list color-propi))))
-                ;; L'ID ha de ser un enter únic: usem (ronda * 100000) + (y * 1000) + x
+                ;; L'ID ha de ser un enter únic: usem (y * 1000) + x
                 (id-unitat (+ (* y 1000) x)))
            (list 'terra (cadr casella) tipus (cadddr casella) 
                  colors-inicials color-propi (nth 6 casella) (nth 7 casella) 
@@ -107,7 +114,7 @@
         (dy (random 1000))
         (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
     (format t "~%[SISTEMA] Coordenades desplazades per dx=~A, dy=~A~%" dx dy)
-    ;; Paràmetres: ronda mapa p1 p2 m1 m2 dx dy historia skip-visual
+    ;; Paràmetres: ronda mapa p1 p2 m1 m2 dx dy historia skip-visual fletxes-prev
     (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil)))
 
 
@@ -120,8 +127,9 @@
                      (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
                      pint-e1 pint-e2 fletxes-prev)))
   
-  (BLACK)
-  ;;(format t "~%R~A E1:~A E2:~A >> [ENTER / b / q]: " ronda pint-e1 pint-e2)
+  ;; FIX: S'ha eliminat (BLACK) aquí. Cridant (BLACK) just després de dibuixa-mapa
+  ;; es reconfigurava el color del pen de XLISP-PLUS i podia causar que el HUD
+  ;; no aparegués de manera consistent en alguns cicles de refresc de la finestra.
   
   (cond 
     ;; 1. VICTÒRIA EQUIP 2 (La base de l'E1 ha desaparegut)
@@ -146,7 +154,9 @@
      'fi-de-partida)
         
     (t 
-     (format t "~%>> [ENTER=Endavant, b=Enrere, q=Sortir]: ")
+     ;; FIX: El prompt ara mostra el número de ronda clarament.
+     ;; Això és especialment útil perquè el HUD pot trigar a refrecar-se.
+     (format t "~%Ronda ~A/1500 | E1:~A | E2:~A >> [ENTER/b/q]: " ronda pint-e1 pint-e2)
      (let* ((input (read-line))
             (cmd (cond ((string-equal input "b") 'b)
                        ((string-equal input "q") 'q)
@@ -154,7 +164,10 @@
        
        (cond 
          ;; 0. BOTÓ SORTIR (q)
+         ;; FIX: S'afegeix (cls) per netejar la pantalla completament en blanc
+         ;; quan l'usuari surt. Sense (cls), el mapa quedava visible.
          ((eq cmd 'q)
+          (cls)
           (format t "~%[SISTEMA] Partida aturada per l'usuari.~%")
           'fi-de-partida)
 
@@ -393,7 +406,7 @@
 ;; ======================================================================
 
 (defun-tco aplica-accions (accions mapa pintura memoria equip coord-origen ronda dx dy fletxes)
-  "Aplica recursivament una llista d'accions retornant el nou (mapa pintura memoria)."
+  "Aplica recursivament una llista d'accions retornant el nou (mapa pintura memoria fletxes)."
   (cond ((null accions) (list mapa pintura memoria fletxes))
         (t
          (let* ((accio (car accions))

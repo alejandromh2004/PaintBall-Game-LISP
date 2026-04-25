@@ -16,10 +16,18 @@
 ;;   - Color del qual está pintada cada casella (fons tenyit per color-casella).
 ;;   - Barres de temps de recuperació (cooldown) de pintar i moure per bolles.
 ;;   - HUD visual INFERIOR: indicadors d'equip actiu, barres de pintura i
-;;     barra de progrés de ronda (ronda/1500).
+;;     número de ronda actual (Ronda: X/1500).
 ;;   - Laboratoris com a triangle gris/negre/blanc sense vora.
 ;;   - Fletxes de moviment (taronja) i d'atac (vermell) sobre el mapa.
 ;;   - Optimització: cls + redibuix complet cada torn.
+;;
+;; CANVIS RESPECTE A LA VERSIÓ ANTERIOR:
+;;   - console-h augmentat de 18 a 26 px perquè la primera fila del mapa
+;;     no quedi tapada per la consola de text.
+;;   - hud-h augmentat de 24 a 30 px per allotjar el número de ronda.
+;;   - gr-barra-ronda substituïda per gr-dibuixa-info-ronda: mostra una
+;;     petita barra de progrés I el text "Ronda: X/1500" sota ella.
+;;   - Separadors verticals del HUD reposicionats per al nou layout.
 ;;
 ;; DISSENY FUNCIONAL:
 ;;   Totes les funcions són pures. El dibuix s'obté passant l'estat com a
@@ -28,12 +36,6 @@
 ;; ESTRUCTURA DE CASELLA (terra):
 ;;   (terra color-casella element equip colors-pintat color-propi
 ;;    tr-pintar tr-moure id-unitat)
-;;
-;; CANVI NECESSARI EN paintball.lsp  (veure baix):
-;;   - Signatura de bucle-partida ampliada amb fletxes-prev.
-;;   - Crida a dibuixa-mapa ampliada amb fletxes-prev.
-;;   - aplica-accions retorna 4 elements (mapa pintura mem fletxes).
-;;   - Les cridades format t de ronda i pintura es consoliden en 1 línia.
 ;; ======================================================================
 
 
@@ -489,20 +491,21 @@
 ;; SECCIÓ 9 – HUD (PANELL D'INFORMACIÓ INFERIOR)
 ;; ======================================================================
 ;;
-;; El HUD es dibuixa a la PART INFERIOR de la finestra (hud-y = 400-hud-h).
-;; D'aquesta manera, el text de la consola (a la part superior) no tapa
-;; el mapa ni el panell d'informació.
+;; El HUD es dibuixa a la PART INFERIOR de la finestra.
+;;
+;; CANVIS respecte a la versió anterior:
+;;   - hud-h augmentat a 30 px per tenir espai per al número de ronda.
+;;   - La barra de progrés de ronda s'ha substituït per gr-dibuixa-info-ronda,
+;;     que mostra una petita barra de color + el número "Ronda: X/1500"
+;;     escrit amb draw-string (disponible a XLISP-PLUS via common.lsp).
 ;;
 ;; Contingut del HUD (d'esquerra a dreta):
 ;;   - Franja lateral de l'equip actiu (3 px, alçada completa del HUD)
-;;   - E1: indicador quadrat (negre) + barra de pintura (amb marques cada 100)
-;;   - E2: indicador quadrat (blanc) + barra de pintura (amb marques cada 100)
+;;   - E1: indicador quadrat (negre) + barra de pintura
+;;   - E2: indicador quadrat (blanc) + barra de pintura
 ;;   - Llegenda de colors (R, G, B, Lab)
-;;   - Barra de progrés de ronda (ronda/1500, de verd a vermell)
+;;   - Número de ronda: barra de progrés + text "Ronda: X/1500"
 ;;   - Punt indicador de l'equip actiu (extrem dret)
-;;
-;; La informació numèrica (ronda i pintura) s'escriu en una sola línia
-;; de consola a paintball.lsp per minimitzar l'espai que ocupa el text.
 ;; ======================================================================
 
 ;; Dibuixa marques verticals a la barra de pintura cada 100 unitats.
@@ -538,25 +541,37 @@
     (color 90 90 90)
     (gr-stroke px py bw bh)))
 
-;; Dibuixa la barra de progrés de ronda al HUD.
-;; Passa de verd (ronda 0) a groc (ronda 500) a vermell (ronda 1000+).
+
+;; Dibuixa la secció de ronda del HUD: petita barra de progrés (verd->groc->vermell)
+;; i el text "Ronda: X/1500" escrit amb draw-string.
+;; El text ocupa la part inferior, la barra la superior.
+;;
 ;; Paràmetres:
-;;   px, py  - posició de la barra
-;;   bw, bh  - amplada i alçada de la barra
+;;   px, py  - cantonada superior-esquerra de la zona de ronda
+;;   bw      - amplada total disponible per a la zona de ronda
+;;   hud-h   - alçada total del HUD (per calcular posicions internes)
 ;;   ronda   - ronda actual (enter)
-(defun gr-barra-ronda (px py bw bh ronda)
-  (let ((ple (max 0 (round (/ (* bw (min ronda 1500.0)) 1500.0)))))
-    ;; Fons fosc
+(defun gr-dibuixa-info-ronda (px py bw hud-h ronda)
+  ;; Barra de progrés (verd->groc->vermell) que ocupa tota l'alçada disponible
+  (let* ((bh  (- hud-h 8))
+         (ple (max 0 (round (/ (* bw (min ronda 1500.0)) 1500.0)))))
     (color 40 40 40)
     (gr-fill px py bw bh)
-    ;; Color progressiu: verd → groc → vermell
     (cond ((< ronda 500)  (color 50  180 80))
           ((< ronda 1000) (color 200 180 50))
           (t              (color 200  60 60)))
     (cond ((> ple 0) (gr-fill px py ple bh)))
-    ;; Vora fina
+    ;; Marques als terços (500 i 1000 rondes)
     (color 90 90 90)
-    (gr-stroke px py bw bh)))
+    (gr-stroke px py bw bh)
+    (let ((t1 (round (/ bw 3.0)))
+          (t2 (round (/ (* bw 2.0) 3.0))))
+      (color 120 120 120)
+      (gr-linia-h (+ px t1) py 1)
+      (gr-linia-h (+ px t1) (+ py 1) 1)
+      (gr-linia-h (+ px t2) py 1)
+      (gr-linia-h (+ px t2) (+ py 1) 1))))
+
 
 ;; Dibuixa el HUD complet a la part inferior de la finestra.
 ;; Paràmetres:
@@ -567,10 +582,10 @@
 ;;   hud-y       - coordenada y d'inici del HUD (baix de la pantalla)
 ;;   hud-h       - alçada del HUD en píxels
 (defun gr-dibuixa-hud (ronda equip-actiu pint-e1 pint-e2 hud-y hud-h)
-  (let* (;; Posicions verticals centrades dins el HUD
+  (let* (;; Posicions verticals centrades dins el HUD (fila de barres/indicadors)
          (y4   (+ hud-y 4))          ; Y per a quadrats d'equip
-         (y6   (+ hud-y 7))          ; Y per a barres de pintura
-         (bh   8))                   ; Alçada de les barres
+         (y6   (+ hud-y 6))          ; Y per a barres de pintura
+         (bh   8))                   ; Alçada de les barres de pintura
 
     ;; === Fons fosc del HUD ===
     (gr-color-hud)
@@ -620,8 +635,9 @@
     (color 55 55 75)
     (gr-fill 422 (+ hud-y 2) 1 (- hud-h 4))
 
-    ;; === Barra de progrés de ronda ===
-    (gr-barra-ronda 428 y6 190 bh ronda)
+    ;; === Número de ronda: barra de progrés + text "Ronda: X/1500" ===
+    ;; Zona: x=428, amplada=190, hud-h total disponible
+    (gr-dibuixa-info-ronda 428 (+ hud-y 4) 190 hud-h ronda)
 
     ;; === Indicador de torn actiu (extrem dret) ===
     ;; Petit quadrat del color de l'equip actiu
@@ -642,6 +658,13 @@
 ;; Funció principal de gràfics. Calcula la mida de casella òptima,
 ;; esborra la pantalla, dibuixa el mapa + fletxes d'accions + HUD.
 ;;
+;; CANVIS respecte a la versió anterior:
+;;   - console-h augmentat de 18 a 26 px per evitar que la primera fila
+;;     del mapa quedi tapada pel text de la consola de XLISP-PLUS.
+;;   - hud-h augmentat de 24 a 30 px per allotjar el text de la ronda.
+;;   - Ja no rep (BLACK) des de paintball.lsp entre el dibuix i el prompt,
+;;     de manera que el HUD resta visible mentre s'espera input.
+;;
 ;; Paràmetres:
 ;;   mapa        - matriu de caselles (llista de llistes)
 ;;   ronda       - número de ronda actual (enter)
@@ -652,7 +675,7 @@
 ;;                 Cada element: (tipus (col-orig row-orig) (col-dest row-dest))
 ;;                 tipus: 'mou (taronja) o 'pinta (vermell)
 ;;
-;; CRIDA EN paintball.lsp (veure comentari al principi del fitxer):
+;; CRIDA EN paintball.lsp:
 ;;   (dibuixa-mapa mapa ronda
 ;;                 (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
 ;;                 pint-e1 pint-e2
@@ -660,10 +683,11 @@
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
   (let* ((files     (length mapa))
          (cols      (length (car mapa)))
-         ;; Espai reservat per al text de la consola (1 línia de prompt)
-         (console-h 18)
-         ;; Alçada del HUD inferior
-         (hud-h     24)
+         ;; FIX: console-h augmentat de 18 a 26 px perquè la primera fila
+         ;;      del mapa no quedi tapada pel text de la consola de XLISP-PLUS.
+         (console-h 26)
+         ;; FIX: hud-h augmentat de 24 a 30 px per allotjar el text de ronda.
+         (hud-h     30)
          ;; Zona disponible per al mapa (entre consola i HUD)
          (area-h    (- 400 hud-h console-h))
          ;; Mida de casella: la mínima de les dues dimensions
@@ -671,7 +695,7 @@
          (m-cols    (floor (/ 640    (max 1 cols))))
          (m         (max 1 (min m-files m-cols)))
          ;; Posicions clau
-         (hud-y     (- 400 hud-h))      ; El HUD comença aquí
+         (hud-y     (- 30 hud-h))      ; El HUD comença aquí
          (offset-y  console-h))         ; El mapa comença aquí (sota la consola)
 
     ;; Esborra tota la pantalla

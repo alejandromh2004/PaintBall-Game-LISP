@@ -13,3 +13,5 @@ L'arquitectura del codi es divideix en tres components principals:
 Tot el projecte s'ha desenvolupat complint amb les restriccions habituals de disseny funcional. En concret, no es permet fer reassignacions ni mutació d'estructures. El tractament seqüencial es duu a terme a través de crides recursives o funcions d'ordre superior (com mapcar o reduce), i mai a través de funcions iteratives.
 
 (load "proyectos/projecte_inicial/paintball.lsp")
+
+(inici "proyectos/projecte_inicial/maps/huge.lsp")
