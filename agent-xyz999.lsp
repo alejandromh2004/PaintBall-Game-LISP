@@ -1,175 +1,254 @@
 ;; ======================================================================
 ;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
-;; Estudiant: XYZ
-;; Data: 25/04/2026
-;; Assignatura: Llenguatges de Programació (LP)
-;; Grup: <Indicar Grup>
-;; Professors: <Indicar Professors>
-;; Convocatòria: Primera Convocatòria (Ordinària)
+;; Estudiant: XYZ (Versió Avançada - Torneig)
 ;;
-;; ----------------------------------------------------------------------
-;; FITXER: agent-xyz999.lsp
-;; DESCRIPCIÓ: Agent intel·ligent avançat. Fa ús de la memòria compartida
-;; per coordinar objectius entre unitats de l'equip. Implementa una 
-;; estratègia d'exploració i setge de bases enemigues.
-;; ----------------------------------------------------------------------
+;; DESCRIPCIÓ: Agent intel·ligent avançat 2.0. 
+;; Paradigma estrictament funcional (Sense if, setq, when, loop).
+;; Incorpora memòria global (A-lists), Swarm Intelligence per l'exploració,
+;; i avaluació heurística del terreny per moure's i atacar de manera letal.
+;; ======================================================================
 
 ;; ----------------------------------------------------------------------
-;; FUNCIONS AUXILIARS (Totes amb el prefix agent-xyz999-)
+;; FUNCIONS MATEMÀTIQUES I BÀSIQUES
 ;; ----------------------------------------------------------------------
 
-(defun agent-xyz999-distancia-q (c1 c2)
+(defun agent-xyz999-dist-q (c1 c2)
   "Calcula la distància euclidiana al quadrat entre dues coordenades."
   (+ (* (- (car c1) (car c2)) (- (car c1) (car c2)))
      (* (- (cadr c1) (cadr c2)) (- (cadr c1) (cadr c2)))))
 
-(defun agent-xyz999-es-terra-buida (casella)
-  "Comprova si una casella de la visió és terra i no té cap element a sobre."
-  ;; Format visió: (coord tipus-casella color-casella tipus-element ...)
-  (and (eq (cadr casella) 'terra)
-       (null (cadddr casella))))
-
-(defun agent-xyz999-es-enemic-o-lab (casella el-meu-equip)
-  "Comprova si hi ha un element disparable (enemic o laboratori no propi)."
-  (let ((element (cadddr casella))
-        (equip-casella (nth 4 casella)))
-    (and element
-         (not (eq equip-casella el-meu-equip)))))
-
-(defun agent-xyz999-busca-caselles-buides-adj (coord visio)
-  "Retorna una llista de coordenades buides a distància <= 2."
-  (cond ((null visio) nil)
-        ((and (agent-xyz999-es-terra-buida (car visio))
-              (<= (agent-xyz999-distancia-q coord (car (car visio))) 2)
-              (not (equal coord (car (car visio))))) ; Que no sigui on som ara
-         (cons (car (car visio)) (agent-xyz999-busca-caselles-buides-adj coord (cdr visio))))
-        (t (agent-xyz999-busca-caselles-buides-adj coord (cdr visio)))))
-
-(defun agent-xyz999-busca-objectius (coord el-meu-equip visio)
-  "Retorna coordenades d'objectius a distància de tret (<= 5)."
-  (cond ((null visio) nil)
-        ((and (agent-xyz999-es-enemic-o-lab (car visio) el-meu-equip)
-              (<= (agent-xyz999-distancia-q coord (car (car visio))) 5))
-         (cons (car (car visio)) (agent-xyz999-busca-objectius coord el-meu-equip (cdr visio))))
-        (t (agent-xyz999-busca-objectius coord el-meu-equip (cdr visio)))))
-
 ;; ----------------------------------------------------------------------
-;; CERVELL DE LA BASE (Agent XYZ999)
+;; GESTIÓ DE LA MEMÒRIA (Associative Lists Pures)
 ;; ----------------------------------------------------------------------
 
-(defun agent-xyz999-decisio-base (pintura coord visio)
-  "Lògica per a les bases: Crear bolles de colors aleatoris si hi ha pintura."
+(defun agent-xyz999-get-mem (clau memoria)
+  "Recupera un valor de la memòria usant la clau."
+  (cond ((null memoria) nil)
+        ((eq (caar memoria) clau) (cdar memoria))
+        (t (agent-xyz999-get-mem clau (cdr memoria)))))
+
+(defun agent-xyz999-set-mem (clau valor memoria)
+  "Actualitza o insereix un valor a la memòria, retornant la nova memòria."
+  (cond ((null memoria) (list (cons clau valor)))
+        ((eq (caar memoria) clau) (cons (cons clau valor) (cdr memoria)))
+        (t (cons (car memoria) (agent-xyz999-set-mem clau valor (cdr memoria))))))
+
+(defun agent-xyz999-esborra-elem (elem llista)
+  "Esborra una instància d'un element d'una llista (per treure labs conquerits)."
+  (cond ((null llista) nil)
+        ((equal elem (car llista)) (agent-xyz999-esborra-elem elem (cdr llista)))
+        (t (cons (car llista) (agent-xyz999-esborra-elem elem (cdr llista))))))
+
+(defun agent-xyz999-afegir-lab (coord mem)
+  "Afegeix un laboratori a la llista de labs objectiu si no hi és."
+  (let ((labs (agent-xyz999-get-mem 'labs mem)))
+    (cond ((member coord labs :test #'equal) mem)
+          (t (agent-xyz999-set-mem 'labs (cons coord labs) mem)))))
+
+(defun agent-xyz999-treure-lab (coord mem)
+  "Treballa conjuntament amb la visió per ignorar els laboratoris que ja són nostres."
+  (let ((labs (agent-xyz999-get-mem 'labs mem)))
+    (cond ((member coord labs :test #'equal)
+           (agent-xyz999-set-mem 'labs (agent-xyz999-esborra-elem coord labs) mem))
+          (t mem))))
+
+;; ----------------------------------------------------------------------
+;; PROCESSAMENT DE LA VISIÓ
+;; ----------------------------------------------------------------------
+
+(defun agent-xyz999-actualitza-memoria (visio mem-actual el-meu-equip)
+  "Recorre la visió per actualitzar el coneixement global (Base i Labs)."
+  (cond ((null visio) mem-actual)
+        (t (let* ((casella (car visio))
+                  (coord (car casella))
+                  (element (cadddr casella))
+                  (equip-element (nth 4 casella))
+                  
+                  ;; Detectar Base enemiga
+                  (mem-1 (cond ((and (eq element 'base) (not (eq equip-element el-meu-equip)))
+                                (agent-xyz999-set-mem 'base coord mem-actual))
+                               (t mem-actual)))
+                  
+                  ;; Detectar Labs (i treure els que ja hàgim capturat)
+                  (mem-2 (cond ((and (eq element 'lab) (not (eq equip-element el-meu-equip)))
+                                (agent-xyz999-afegir-lab coord mem-1))
+                               ((and (eq element 'lab) (eq equip-element el-meu-equip))
+                                (agent-xyz999-treure-lab coord mem-1))
+                               (t mem-1))))
+             
+             (agent-xyz999-actualitza-memoria (cdr visio) mem-2 el-meu-equip)))))
+
+;; ----------------------------------------------------------------------
+;; SISTEMA TÀCTIC DE COMBAT (PUNTERIA)
+;; ----------------------------------------------------------------------
+
+(defun agent-xyz999-avalua-tret (casella el-meu-equip el-meu-color coord-actual)
+  "Retorna una puntuació de prioritat per disparar a aquesta casella."
+  (let* ((coord-obj (car casella))
+         (dist (agent-xyz999-dist-q coord-actual coord-obj))
+         (element (cadddr casella))
+         (equip-obj (nth 4 casella))
+         (colors-pintats (nth 5 casella)))
+    (cond ((> dist 25) -1) ; Massa lluny (5^2 = 25)
+          ((null element) -1) ; Res a disparar
+          ((eq equip-obj el-meu-equip) -1) ; Mai disparar a aliats
+          
+          ;; Base enemiga: Prioritat absoluta, excepte si ja té el nostre color!
+          ((eq element 'base)
+           (cond ((member el-meu-color colors-pintats) -1)
+                 (t 1000))) 
+          
+          ;; Laboratoris neutrals o enemics
+          ((eq element 'lab) 500)
+          
+          ;; Bolles enemigues
+          ((eq element 'bolla) 100)
+          (t -1))))
+
+(defun agent-xyz999-millor-tret (visio equip color coord-actual millor-coord millor-punt)
+  "Cerca el millor objectiu per disparar recursivament."
+  (cond ((null visio) millor-coord)
+        (t (let* ((casella (car visio))
+                  (punt (agent-xyz999-avalua-tret casella equip color coord-actual)))
+             (cond ((> punt millor-punt)
+                    (agent-xyz999-millor-tret (cdr visio) equip color coord-actual (car casella) punt))
+                   (t
+                    (agent-xyz999-millor-tret (cdr visio) equip color coord-actual millor-coord millor-punt)))))))
+
+;; ----------------------------------------------------------------------
+;; SISTEMA DE NAVEGACIÓ (GREEDY HEURÍSTIC I EXPLORACIÓ)
+;; ----------------------------------------------------------------------
+
+(defun agent-xyz999-es-movible (casella coord-actual)
+  "Comprova si la casella està buida, és de terra i és adient per moure's (distància <= 2)."
+  (let ((coord (car casella))
+        (tipus (cadr casella))
+        (element (cadddr casella)))
+    (and (eq tipus 'terra)
+         (null element)
+         (<= (agent-xyz999-dist-q coord coord-actual) 2)
+         (not (equal coord coord-actual)))))
+
+(defun agent-xyz999-filtra-movibles (visio coord-actual)
+  "Retorna una llista amb totes les caselles admeses per caminar."
+  (cond ((null visio) nil)
+        ((agent-xyz999-es-movible (car visio) coord-actual)
+         (cons (car visio) (agent-xyz999-filtra-movibles (cdr visio) coord-actual)))
+        (t (agent-xyz999-filtra-movibles (cdr visio) coord-actual))))
+
+(defun agent-xyz999-punt-exploracio (coord id)
+  "Força les bolles a dispersar-se als 4 punts cardinals segons el seu ID."
+  (let* ((id-segur (cond (id id) (t (random 1000)))) ; Prevenció per si l'entorn falla
+         (quadrant (rem id-segur 4))
+         (cx (car coord))
+         (cy (cadr coord)))
+    (cond ((= quadrant 0) (list (+ cx 1000) (+ cy 1000)))
+          ((= quadrant 1) (list (- cx 1000) (+ cy 1000)))
+          ((= quadrant 2) (list (+ cx 1000) (- cy 1000)))
+          (t              (list (- cx 1000) (- cy 1000))))))
+
+(defun agent-xyz999-tria-desti (coord-actual mem id-unitat)
+  "Elegeix cap a on ha de marxar la unitat (Base -> Lab -> Explorar)."
+  (let ((base-enemic (agent-xyz999-get-mem 'base mem))
+        (labs (agent-xyz999-get-mem 'labs mem)))
+    (cond (base-enemic base-enemic)
+          (labs (car labs))
+          (t (agent-xyz999-punt-exploracio coord-actual id-unitat)))))
+
+(defun agent-xyz999-cost-pas (casella-desti desti-final el-meu-color)
+  "Heurística de cost: Combina la distància al destí final amb el perill de caminar on no toca."
+  (let* ((coord (car casella-desti))
+         (color-casella (caddr casella-desti)) ; color de la pintura a terra
+         (dist-al-desti (agent-xyz999-dist-q coord desti-final))
+         ;; Donem preferència a caminar pel propi color per mantenir temps_recuperacio baix
+         (pena-color (cond ((eq color-casella el-meu-color) 0) (t 300)))) 
+    (+ (* dist-al-desti 100) pena-color)))
+
+(defun agent-xyz999-millor-pas (movibles desti-final el-meu-color millor-coord millor-cost)
+  "Troba la casella amb menor cost per apropar-nos al destí heurísticament."
+  (cond ((null movibles) millor-coord)
+        (t (let* ((casella (car movibles))
+                  (cost (agent-xyz999-cost-pas casella desti-final el-meu-color)))
+             (cond ((< cost millor-cost)
+                    (agent-xyz999-millor-pas (cdr movibles) desti-final el-meu-color (car casella) cost))
+                   (t
+                    (agent-xyz999-millor-pas (cdr movibles) desti-final el-meu-color millor-coord millor-cost)))))))
+
+;; ----------------------------------------------------------------------
+;; CERVELL BASE I BOLLA
+;; ----------------------------------------------------------------------
+
+(defun agent-xyz999-decisio-base (pintura coord visio mem)
+  "Crea bolles intel·ligentment posant-les al millor flanc envers els enemics."
   (cond ((>= pintura 50)
-         (let ((buides (agent-xyz999-busca-caselles-buides-adj coord visio)))
-           (cond ((null buides) nil)
-                 (t 
-                  ;; Triem un color a l'atzar entre r, g i b
-                  (let ((color-aleatori (nth (random 3) '(r g b))))
-                    (list (list 'crea-bolla (list color-aleatori (car buides)))))))))
+         (let ((movibles (agent-xyz999-filtra-movibles visio coord)))
+           (cond ((null movibles) nil)
+                 (t
+                  (let* ((desti (agent-xyz999-tria-desti coord mem 0))
+                         (millor-casella (agent-xyz999-millor-pas movibles desti 'cap nil 1000000000))
+                         ;; Correcció del bug: millor-casella JA ÉS la coordenada
+                         (coord-spawn (cond (millor-casella millor-casella) (t (car (car movibles)))))
+                         (color-nou (nth (random 3) '(r g b))))
+                    (list (list 'crea-bolla (list color-nou coord-spawn))))))))
         (t nil)))
 
-;; ----------------------------------------------------------------------
-;; CERVELL DE LA BOLLA
-;; ----------------------------------------------------------------------
+(defun agent-xyz999-intentar-moure (coord temps-moure visio mem color-propi id-unitat)
+  "Aplica l'heurística A* Greedy de moviment."
+  (cond ((< temps-moure 1)
+         (let ((movibles (agent-xyz999-filtra-movibles visio coord)))
+           (cond ((null movibles) nil)
+                 (t (let* ((desti (agent-xyz999-tria-desti coord mem id-unitat))
+                           (millor (agent-xyz999-millor-pas movibles desti color-propi nil 1000000000)))
+                      ;; Correcció del bug: No fer car a millor
+                      (cond (millor (list (list 'mou (list millor))))
+                            (t nil)))))))
+        (t nil)))
 
-(defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure visio memoria)
-  "Lògica per a les bolles: Disparar si pot, o moure's intel·ligentment."
+(defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure visio mem id-unitat)
+  "Decideix si disparar a l'objectiu més crític, o avançar."
   (let ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
         (temps-moure (cond (tr-moure tr-moure) (t 0))))
-    (cond 
-      ;; 1. Disparar (Prioritat 1)
+    (cond
+      ;; Prioritat Absoluta: Disparar (si cooldown ho permet)
       ((< temps-pintar 1)
-       (let ((objectius (agent-xyz999-busca-objectius coord equip visio)))
-         (cond ((not (null objectius))
-                (list (list 'pinta (list (car objectius)))))
-               (t (agent-xyz999-intentar-moure coord temps-moure visio memoria)))))
+       (let ((tret (agent-xyz999-millor-tret visio equip color-propi coord nil -1)))
+         (cond (tret (list (list 'pinta (list tret))))
+               ;; Si no hi ha res per disparar, ens movem
+               (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat)))))
       
-      ;; 2. Moure's
-      (t (agent-xyz999-intentar-moure coord temps-moure visio memoria)))))
+      ;; Si no podem disparar, intentem moure'ns
+      (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat)))))
 
-(defun agent-xyz999-intentar-moure (coord temps-moure visio memoria)
-  "Es mou cap al primer objectiu de la memòria. Si no n'hi ha, explora a l'atzar."
-  (cond ((< temps-moure 1)
-         (let ((buides (agent-xyz999-busca-caselles-buides-adj coord visio)))
-           (cond ((null buides) nil)
-                 (memoria
-                  (let ((millor-casella (agent-xyz999-millor-pas buides (car memoria))))
-                    (list (list 'mou (list millor-casella)))))
-                 (t
-                  ;; EXPLORACIÓ: La memòria està buida, busquem a l'atzar.
-                  (let ((casella-aleatoria (nth (random (length buides)) buides)))
-                    (list (list 'mou (list casella-aleatoria))))))))
-        (t nil)))
 ;; ----------------------------------------------------------------------
-;; PUNT D'ENTRADA PRINCIPAL
+;; PUNT D'ENTRADA PRINCIPAL (INTERFÍCIE)
 ;; ----------------------------------------------------------------------
 
 (defun agent-xyz999 (dades)
-  "Retorna (accio nova-memoria) o (nil nova-memoria)."
-  (let* ((equip (nth 1 dades))
+  "Llegeix la llista d'estat de Paintball i orquestra la decisió."
+  (let* ((ronda (nth 0 dades))
+         (equip (nth 1 dades))
          (pintura (nth 2 dades))
+         (id-unitat (nth 3 dades))
          (tipus-unitat (nth 4 dades))
          (coord (nth 5 dades))
+         (colors-pintat (nth 6 dades))
+         (color-propi (nth 7 dades))
          (tr-pintar (nth 8 dades))
          (tr-moure (nth 9 dades))
          (visio (nth 10 dades))
-         (memoria-antiga (nth 11 dades)) 
+         (mem-antiga (nth 11 dades))
          
-         ;; 1. La unitat llegeix la visió i apunta/esborra coses a la llibreta
-         (memoria-nova (agent-xyz999-actualitza-memoria visio memoria-antiga equip))
+         ;; Actualitzar la intel·ligència de xarxa amb el que veu aquesta unitat
+         (mem-nova (agent-xyz999-actualitza-memoria visio mem-antiga equip))
          
-         ;; 2. Pren la decisió
+         ;; Prendre l'acció
          (accio (cond ((eq tipus-unitat 'base)
-                       (agent-xyz999-decisio-base pintura coord visio))
+                       (agent-xyz999-decisio-base pintura coord visio mem-nova))
                       ((eq tipus-unitat 'bolla)
-                       (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure visio memoria-nova))
+                       (agent-xyz999-decisio-bolla coord equip color-propi tr-pintar tr-moure visio mem-nova id-unitat))
                       (t nil))))
     
-    ;; 3. Retornem la llista d'accions (incloent l'actualització de memòria)
-    (append (list (list 'escriu-memoria (list memoria-nova)))
+    ;; Retornar SEMPRE la memòria compartida primer, seguida de les accions
+    (append (list (list 'escriu-memoria (list mem-nova)))
             accio)))
-
-;; ----------------------------------------------------------------------
-;; FUNCIONS DE GESTIÓ DE MEMORIA
-;; ----------------------------------------------------------------------
-
-(defun agent-xyz999-esborra-coord (coord llista)
-  "Esborra una coordenada de la memòria."
-  (cond ((null llista) nil)
-        ((equal coord (car llista)) (agent-xyz999-esborra-coord coord (cdr llista)))
-        (t (cons (car llista) (agent-xyz999-esborra-coord coord (cdr llista))))))
-
-(defun agent-xyz999-actualitza-memoria (visio memoria el-meu-equip)
-  "Llegeix la visió i actualitza la llibreta (memòria) amb els objectius."
-  (cond ((null visio) memoria)
-        (t
-         (let* ((casella (car visio))
-                (coord (car casella))
-                (element (cadddr casella))
-                (equip-element (nth 4 casella))
-                ;; Cridem recursivament per a la resta de la visió
-                (mem-restant (agent-xyz999-actualitza-memoria (cdr visio) memoria el-meu-equip)))
-           (cond
-             ;; Si és un Lab neutral/enemic o una Base enemiga, l'afegim (si no hi és ja)
-              ((and element (not (eq equip-element el-meu-equip)) 
-                   (or (eq element 'lab) (eq element 'base)))
-                (cond ((member coord mem-restant :test #'equal) mem-restant)
-                      (t (cons coord mem-restant)))
-              )
-             
-             ;; Si és un Lab NOSTRE (ja capturat), l'esborrem de la memòria perquè deixin d'anar-hi
-             ((and (eq element 'lab) (eq equip-element el-meu-equip))
-              (agent-xyz999-esborra-coord coord mem-restant))
-             
-             (t mem-restant))))))
-
-(defun agent-xyz999-millor-pas (buides desti)
-  "Tria la casella buida que ens acosta més a la coordenada destí."
-  (cond ((null buides) nil)
-        ((null (cdr buides)) (car buides))
-        (t (let ((millor-resta (agent-xyz999-millor-pas (cdr buides) desti)))
-             (cond ((< (agent-xyz999-distancia-q (car buides) desti)
-                       (agent-xyz999-distancia-q millor-resta desti))
-                    (car buides))
-                   (t millor-resta))))))
