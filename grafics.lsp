@@ -131,5 +131,4 @@
          (m-cols (floor (/ 630 cols)))
          (m (max 1 (min m-files m-cols))))
     (cls)
-    ;; Comencem a dibuixar a y=20 per deixar espai a les puntuacions de la part superior
     (pinta-files mapa 0 m)))

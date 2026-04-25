@@ -144,11 +144,18 @@
      'fi-de-partida)
         
     (t 
-     (format t "~%>> [ENTER=Endavant, b=Enrere]: ")
+     (format t "~%>> [ENTER=Endavant, b=Enrere, q=Sortir]: ")
      (let* ((input (read-line))
-            (cmd (cond ((string-equal input "b") 'b) (t 'f))))
+            (cmd (cond ((string-equal input "b") 'b)
+                       ((string-equal input "q") 'q)
+                       (t 'f))))
        
        (cond 
+         ;; 0. BOTÓ SORTIR (q)
+         ((eq cmd 'q)
+          (format t "~%[SISTEMA] Partida aturada per l'usuari.~%")
+          'fi-de-partida)
+
          ;; 1. BOTÓ ENRERE (b)
          ((and (eq cmd 'b) historia)
           (let ((estat-ant (car historia)))
