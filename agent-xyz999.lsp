@@ -8,614 +8,576 @@
 ;;
 ;; FITXER: agent-xyz999.lsp
 ;;
-;; ESTRATÈGIA GENERAL ("Dominació per Capes"):
-;;   L'agent implementa una estratègia militar orgànica de tres capes:
+;; ESTRATÈGIA GENERAL v2 ("Coordinated Deep Strike"):
 ;;
-;;   1. EXPLORACIÓ INTEL·LIGENT: Les bolles noves exploren en direccions
-;;      disperses (no al mateix punt), usant un sistema de dispersió
-;;      basat en l'ID + ronda per no agrupar-se mai.
+;;   ROLS (per ID mod 3):
+;;     0 → ATACANT:    Rush directe a base enemiga quan la coneix.
+;;                     Si no la coneix, explora en el seu sector únic.
+;;     1 → CHASSADOR:  Va al lab enemic/neutral MÉS PROPER per acumular
+;;                     pintura. Si captura tots els labs, defen els aliats.
+;;                     Si no hi ha labs, s'uneix a l'atac.
+;;     2 → EXPLORADOR: Cobreix sectors del mapa sistemàticament.
+;;                     Si la base és coneguda, s'uneix a l'atac.
+;;                     → 2/3 de les unitats atacaran la base quan sigui visible.
+;;                     → 1/3 manté el flux de pintura capturant labs.
 ;;
-;;   2. ECONOMIA PRIMER: La base no creï bolles fins tenir >50 pintura,
-;;      i priorirza els colors que FALTEN a la base enemiga. Si la base
-;;      enemiga no es coneix, equilibra els tres colors.
+;;   TRET (prioritats estrictes per cooldown < 1):
+;;     9000 → Kill shot base (té 2 colors, el nostre és el 3r → DESTRUÏDA!)
+;;     5000 → Segon color a la base (té 1 color)
+;;     2000 → Primer color a la base (0 colors)
+;;      800 → Kill shot bolla enemiga (2 colors, el nostre és el 3r)
+;;      400 → Dany a bolla enemiga (li falta el nostre color)
+;;      200 → Captura lab enemic/neutral
+;;       -1 → No disparar (aliat, buida, ja té el nostre color, fora rang)
 ;;
-;;   3. ROLS DINÀMICS AMB FASES:
-;;      - Fase EARLY (rondes 1-200): Explorar, capturar labs, evitar combat.
-;;      - Fase MID (rondes 200-800): Atac coordinat, capturar labs, 
-;;        roles d'atac/explorar equilibrats.
-;;      - Fase LATE (rondes 800+): Atac total a la base enemiga.
-;;      - Roles per ID: atacants, exploradors, defensors roten dinàmicament.
+;;   MOVIMENT: Greedy cap al destí de rol. Penalitza caselles de color
+;;             incorrecte per estalviar cooldown de moviment (+100 cost).
 ;;
-;;   4. COMBAT INTEL·LIGENT:
-;;      - Prioritat de tret: base enemiga (colors que falten) > bolla
-;;        enemiga quasi morta > bolla enemiga > lab enemic.
-;;      - MAI disparar a aliats.
-;;      - Pinta la casella pròpia si no és del propi color (elimina penalització).
-;;      - Fuig si quasi morta (2 colors pintats).
+;;   BASE: Crea una bolla per torn si té ≥ 50 pintura.
+;;     Color: el que destruirà la base enemiga (o rota r/g/b per equilibrar).
+;;     Quan la base enemiga té 2 colors, SEMPRE crea l'únic kill color.
+;;     Spawn cap a la base enemiga (o labs) per guanyar temps.
 ;;
-;;   5. NAVEGACIÓ EFICIENT:
-;;      - Prefereix caminar per caselles del propi color (evita x3 cooldown).
-;;      - Greedy heurística cap al destí amb penalització de color.
-;;      - Exploració amb vectors de dispersió per ID+ronda (no s'agrupen).
+;;   MEMÒRIA COMPARTIDA (~70 àtoms, molt per sota del límit de 100000):
+;;     base-ally:          coordenada de la base aliada
+;;     base-enemy:         coordenada de la base enemiga
+;;     colors-base-enemy:  colors ja pintats a la base enemiga
+;;     labs:               coords de labs enemics/neutrals (objectius, màx 15)
+;;     labs-a:             coords de labs aliats (per defensar, màx 10)
 ;;
-;;   6. MEMÒRIA COMPARTIDA:
-;;      - Guarda: posició base aliada, posició base enemiga, llista de labs,
-;;        colors que ja té pintats la base enemiga.
-;;      - Cada unitat llegeix la memòria i la pot ampliar.
+;;   CORRECCIONS CRÍTIQUES respecte v1:
+;;     ❌ v1: Exploració a distància 400u → unitats bloquejades al límit del mapa
+;;     ✅ v2: Exploració a distància 15u → cobreix correctament el mapa
+;;     ❌ v1: Fase d'exploració cada 300 rondes → adaptació massa lenta
+;;     ✅ v2: Fase cada 30 rondes → gira de sector més sovint
+;;     ❌ v1: Lab seleccionat aleatòriament per ID → moltes unitats al mateix lab
+;;     ✅ v2: Lab MÉS PROPER a la unitat → resposta ràpida i sense col·lisions
+;;     ❌ v1: Totes les unitats a base enemiga quan es coneix → 0 pintura extra
+;;     ✅ v2: 1/3 chassadors mantenen labs per flux de pintura
 ;;
-;; FUNCIONS AUXILIARS: Totes prefixades amb "agent-xyz999-".
+;;   DISSENY FUNCIONAL: Sense reassignació ni mutació d'estructures.
+;;   Tractament seqüencial exclusivament per recursió.
+;;   FUNCIONS: Totes prefixades amb "agent-xyz999-".
+;;
+;;   ÚS: (agent-xyz999 dades) - cridat pel controlador per cada unitat.
 ;; ======================================================================
 
 
 ;; ======================================================================
-;; SECCIÓ 1: MATEMÀTIQUES I UTILITATS
+;; SECCIÓ 1: UTILITATS BÀSIQUES
 ;; ======================================================================
 
 (defun agent-xyz999-dist-q (c1 c2)
-  "Distància euclidiana al quadrat entre dues coordenades (llistes de 2 enters)."
-  (+ (* (- (car c1) (car c2)) (- (car c1) (car c2)))
-     (* (- (cadr c1) (cadr c2)) (- (cadr c1) (cadr c2)))))
+  "Distància euclidiana al quadrat entre dues coordenades (x y).
+   Robusta a nil: retorna 1000000 si alguna és nil.
+   c1, c2: llistes (x y) o nil."
+  (cond ((or (null c1) (null c2)) 1000000)
+        (t (let ((dx (- (car c1) (car c2)))
+                 (dy (- (cadr c1) (cadr c2))))
+             (+ (* dx dx) (* dy dy))))))
 
 (defun agent-xyz999-abs (n)
-  "Valor absolut d'un nombre."
-  (cond ((< n 0) (- n)) (t n)))
+  "Valor absolut d'un enter. Robusta a nil (retorna 0).
+   n: enter o nil."
+  (cond ((null n) 0)
+        ((< n 0) (- n))
+        (t n)))
 
-(defun agent-xyz999-max2 (a b)
-  "Màxim de dos nombres."
-  (cond ((>= a b) a) (t b)))
+(defun agent-xyz999-longitud (lst)
+  "Longitud d'una llista lst."
+  (cond ((null lst) 0)
+        (t (+ 1 (agent-xyz999-longitud (cdr lst))))))
 
-(defun agent-xyz999-min2 (a b)
-  "Mínim de dos nombres."
-  (cond ((<= a b) a) (t b)))
+(defun agent-xyz999-nth-safe (n lst)
+  "Retorna el n-è element (0-indexat) de lst, o nil si fora de rang.
+   n: enter >= 0. lst: llista."
+  (cond ((null lst) nil)
+        ((= n 0) (car lst))
+        (t (agent-xyz999-nth-safe (- n 1) (cdr lst)))))
 
-(defun agent-xyz999-signum (n)
-  "Retorna -1, 0 o 1 segons el signe de n."
-  (cond ((> n 0) 1) ((< n 0) -1) (t 0)))
+(defun agent-xyz999-elimina (elem lst)
+  "Elimina totes les aparicions d'elem de lst (comparació per equal).
+   elem: qualsevol. lst: llista."
+  (cond ((null lst) nil)
+        ((equal (car lst) elem)
+         (agent-xyz999-elimina elem (cdr lst)))
+        (t (cons (car lst)
+                 (agent-xyz999-elimina elem (cdr lst))))))
 
-(defun agent-xyz999-membre-igual (elem llista)
-  "Cerca elem a llista usant equal (per coordenades)."
-  (cond ((null llista) nil)
-        ((equal elem (car llista)) t)
-        (t (agent-xyz999-membre-igual elem (cdr llista)))))
-
-(defun agent-xyz999-longitud (llista)
-  "Longitud d'una llista."
-  (cond ((null llista) 0)
-        (t (+ 1 (agent-xyz999-longitud (cdr llista))))))
-
-(defun agent-xyz999-nth-safe (n llista)
-  "Com nth però retorna nil si fora de rang."
-  (cond ((null llista) nil)
-        ((= n 0) (car llista))
-        (t (agent-xyz999-nth-safe (- n 1) (cdr llista)))))
-
-(defun agent-xyz999-compta-membres (elem llista)
-  "Compta quantes vegades apareix elem a llista (amb equal)."
-  (cond ((null llista) 0)
-        ((equal (car llista) elem) (+ 1 (agent-xyz999-compta-membres elem (cdr llista))))
-        (t (agent-xyz999-compta-membres elem (cdr llista)))))
-
-(defun agent-xyz999-limita-llista (llista n)
-  "Retorna els primers n elements de la llista (per no saturar memòria)."
-  (cond ((null llista) nil)
-        ((<= n 0) nil)
-        (t (cons (car llista) (agent-xyz999-limita-llista (cdr llista) (- n 1))))))
-
-(defun agent-xyz999-esborra-elem (elem llista)
-  "Elimina totes les instàncies d'elem a llista (equal)."
-  (cond ((null llista) nil)
-        ((equal elem (car llista)) (agent-xyz999-esborra-elem elem (cdr llista)))
-        (t (cons (car llista) (agent-xyz999-esborra-elem elem (cdr llista))))))
+(defun agent-xyz999-membre (elem lst)
+  "Comprova si elem és a lst (comparació per equal). Retorna t o nil.
+   Necessari perquè member en XLISP-PLUS pot usar eql per defecte.
+   elem: qualsevol. lst: llista."
+  (cond ((null lst) nil)
+        ((equal (car lst) elem) t)
+        (t (agent-xyz999-membre elem (cdr lst)))))
 
 
 ;; ======================================================================
-;; SECCIÓ 2: GESTIÓ DE MEMÒRIA COMPARTIDA (A-lists pures)
+;; SECCIÓ 2: MEMÒRIA COMPARTIDA (a-list pura, sense mutació)
 ;; ======================================================================
 
-(defun agent-xyz999-get-mem (clau mem)
-  "Retorna el valor associat a clau en la memòria (a-list). Nil si no existeix."
+(defun agent-xyz999-get (clau mem)
+  "Retorna el valor associat a clau en la memòria (a-list).
+   clau: símbol. mem: a-list ((clau . valor) ...). Retorna nil si no existeix."
   (cond ((null mem) nil)
         ((eq (caar mem) clau) (cdar mem))
-        (t (agent-xyz999-get-mem clau (cdr mem)))))
+        (t (agent-xyz999-get clau (cdr mem)))))
 
-(defun agent-xyz999-set-mem (clau valor mem)
-  "Insereix o actualitza la parella (clau . valor) a la memòria. Retorna nova mem."
-  (cond ((null mem) (list (cons clau valor)))
-        ((eq (caar mem) clau) (cons (cons clau valor) (cdr mem)))
-        (t (cons (car mem) (agent-xyz999-set-mem clau valor (cdr mem))))))
+(defun agent-xyz999-set (clau val mem)
+  "Insereix o actualitza la parella (clau . val) a la memòria.
+   Retorna la nova memòria (no muta l'original).
+   clau: símbol. val: qualsevol. mem: a-list."
+  (cond ((null mem) (list (cons clau val)))
+        ((eq (caar mem) clau) (cons (cons clau val) (cdr mem)))
+        (t (cons (car mem)
+                 (agent-xyz999-set clau val (cdr mem))))))
 
-(defun agent-xyz999-afegir-a-llista-mem (clau elem mem)
-  "Afegeix elem a la llista guardada sota clau (si no hi és ja, per equal)."
-  (let ((llista-actual (agent-xyz999-get-mem clau mem)))
-    (cond ((agent-xyz999-membre-igual elem llista-actual) mem)
-          (t (agent-xyz999-set-mem clau (cons elem llista-actual) mem)))))
-
-(defun agent-xyz999-treure-de-llista-mem (clau elem mem)
-  "Elimina elem de la llista guardada sota clau."
-  (let ((llista-actual (agent-xyz999-get-mem clau mem)))
-    (agent-xyz999-set-mem clau (agent-xyz999-esborra-elem elem llista-actual) mem)))
+(defun agent-xyz999-afegir-coord (coord llista max-n)
+  "Afegeix coord a llista si no hi és i no supera max-n elements.
+   Usa equal per comparar coordenades (llistes).
+   coord: (x y). llista: llista de coords. max-n: enter."
+  (cond ((agent-xyz999-membre coord llista) llista)
+        ((>= (agent-xyz999-longitud llista) max-n) llista)
+        (t (cons coord llista))))
 
 
 ;; ======================================================================
-;; SECCIÓ 3: ACCESSORS DE CASELLA (estructura del controlador)
+;; SECCIÓ 3: ACCESSORS DE CASELLA DE LA VISIÓ
 ;;
-;;  Estructura casella terra: 
-;;   (terra color-casella tipus-elem equip colors-pintat color-propi
-;;    tr-pintar tr-moure id-unitat)
-;;  Índexs en la VISIÓ:
-;;   0=coord 1=tipus-casella 2=color-casella 3=tipus-elem 4=equip
-;;   5=colors-pintat 6=color-propi 7=tr-pintar 8=tr-moure
+;; Estructura d'una casella a la visió (índexs 0-8):
+;;   0 = coordenada (x y)
+;;   1 = tipus-casella ('terra o 'aigua)
+;;   2 = color-casella ('r 'g o 'b)       [només si terra]
+;;   3 = tipus-element ('base 'bolla 'lab) [si hi ha element]
+;;   4 = equip ('e1 'e2 o nil)
+;;   5 = colors-pintat (llista de colors pintats, pot ser nil)
+;;   6 = color-propi (color de la bolla, nil si és base/lab)
+;;   7 = tr-pintar (cooldown pintar)
+;;   8 = tr-moure  (cooldown moure)
 ;; ======================================================================
 
-(defun agent-xyz999-vis-coord (c)       (nth 0 c))
-(defun agent-xyz999-vis-tipus (c)       (nth 1 c))
-(defun agent-xyz999-vis-color-terra (c) (nth 2 c))
-(defun agent-xyz999-vis-element (c)     (nth 3 c))
-(defun agent-xyz999-vis-equip (c)       (nth 4 c))
-(defun agent-xyz999-vis-colors-p (c)    (nth 5 c))
-(defun agent-xyz999-vis-color-propi (c) (nth 6 c))
-(defun agent-xyz999-vis-tr-pintar (c)   (nth 7 c))
-(defun agent-xyz999-vis-tr-moure (c)    (nth 8 c))
-
-
-;; ======================================================================
-;; SECCIÓ 4: PROCESSAMENT DE LA VISIÓ → ACTUALITZACIÓ MEMÒRIA
-;; ======================================================================
-
-(defun agent-xyz999-actualitza-mem-visio (visio mem equip)
-  "Recorre la visió i actualitza la memòria amb base enemiga, labs i colors enemics."
-  (cond ((null visio) mem)
-        (t (let* ((c (car visio))
-                  (coord (agent-xyz999-vis-coord c))
-                  (tipus (agent-xyz999-vis-tipus c))
-                  (elem (agent-xyz999-vis-element c))
-                  (eq-c (agent-xyz999-vis-equip c))
-                  (colors-p (agent-xyz999-vis-colors-p c))
-                  
-                  ;; Base enemiga: guardem posició i colors que ja té pintats
-                  (mem1 (cond ((and (eq elem 'base) (not (eq eq-c equip)))
-                               (agent-xyz999-set-mem 'colors-base-enemy colors-p
-                                (agent-xyz999-set-mem 'base-enemy coord mem)))
-                              ;; Base aliada
-                              ((and (eq elem 'base) (eq eq-c equip))
-                               (agent-xyz999-set-mem 'base-ally coord mem))
-                              (t mem)))
-                  
-                  ;; Labs: afegim si no és nostre, treiem si ja és nostre
-                  (mem2 (cond ((and (eq elem 'lab) (not (eq eq-c equip)) (eq tipus 'terra))
-                               (agent-xyz999-afegir-a-llista-mem 'labs coord mem1))
-                              ((and (eq elem 'lab) (eq eq-c equip))
-                               (agent-xyz999-treure-de-llista-mem 'labs coord mem1))
-                              (t mem1))))
-             
-             (agent-xyz999-actualitza-mem-visio (cdr visio) mem2 equip)))))
+(defun agent-xyz999-c-coord  (c) (nth 0 c))
+(defun agent-xyz999-c-tipus  (c) (nth 1 c))
+(defun agent-xyz999-c-color  (c) (nth 2 c))
+(defun agent-xyz999-c-elem   (c) (nth 3 c))
+(defun agent-xyz999-c-equip  (c) (nth 4 c))
+(defun agent-xyz999-c-colors (c) (nth 5 c))
 
 
 ;; ======================================================================
-;; SECCIÓ 5: AVALUACIÓ DE FASE (early/mid/late)
+;; SECCIÓ 4: ACTUALITZACIÓ DE MEMÒRIA A PARTIR DE LA VISIÓ
 ;; ======================================================================
 
-(defun agent-xyz999-fase (ronda)
-  "Retorna la fase estratègica: 'early (0-200), 'mid (200-800), 'late (800+)."
-  (cond ((< ronda 200) 'early)
-        ((< ronda 800) 'mid)
-        (t 'late)))
+(defun agent-xyz999-actualitza-mem (vis mem equip)
+  "Recorre la visió vis i actualitza la memòria mem:
+     base-ally, base-enemy, colors-base-enemy: bases vistes.
+     labs: labs enemics/neutrals (objectius d'atac).
+     labs-a: labs aliats (a defensar).
+   vis: llista de caselles. mem: a-list. equip: 'e1 o 'e2."
+  (cond
+    ((null vis) mem)
+    (t (let* ((c     (car vis))
+              (coord (cond (c (agent-xyz999-c-coord c)) (t nil)))
+              (elem  (cond (c (agent-xyz999-c-elem c))  (t nil)))
+              (eq-c  (cond (c (agent-xyz999-c-equip c)) (t nil)))
+              (cp    (cond (c (agent-xyz999-c-colors c)) (t nil)))
 
-(defun agent-xyz999-rol (id-unitat ronda)
-  "Assigna un rol a la bolla: 'atacant, 'explorador, 'defensor.
-   Els rols roten per fase per evitar comportament fix."
-  (let* ((fase (agent-xyz999-fase ronda))
-         (mod3 (rem (agent-xyz999-abs id-unitat) 3))
-         (mod5 (rem (agent-xyz999-abs id-unitat) 5)))
-    (cond 
-      ;; Early: majoria exploradors, pocs defensors
-      ((eq fase 'early)
-       (cond ((= mod5 0) 'defensor)
-             (t 'explorador)))
-      ;; Mid: mix equilibrat
-      ((eq fase 'mid)
-       (cond ((= mod3 0) 'defensor)
-             ((= mod3 1) 'atacant)
-             (t 'explorador)))
-      ;; Late: quasi tot atacants
-      (t
-       (cond ((= mod5 0) 'defensor)
-             (t 'atacant))))))
+              ;; Actualitza informació de bases
+              (mem1  (cond
+                       ;; Base enemiga vista: guardem posició i colors pintats
+                       ((and (eq elem 'base) coord eq-c (not (eq eq-c equip)))
+                        (agent-xyz999-set 'colors-base-enemy cp
+                          (agent-xyz999-set 'base-enemy coord mem)))
+                       ;; Base aliada: guardem posició
+                       ((and (eq elem 'base) coord (eq eq-c equip))
+                        (agent-xyz999-set 'base-ally coord mem))
+                       (t mem)))
+
+              ;; Actualitza labs:
+              ;; - Lab aliat → a labs-a (defensa), fora de labs (ja no és objectiu)
+              ;; - Lab enemic/neutral → a labs (objectiu), fora de labs-a
+              (mem2  (cond
+                       ((and (eq elem 'lab) coord)
+                        (cond
+                          ;; Lab capturat per nosaltres
+                          ((eq eq-c equip)
+                           (agent-xyz999-set 'labs-a
+                             (agent-xyz999-afegir-coord coord
+                               (agent-xyz999-get 'labs-a mem1) 10)
+                             (agent-xyz999-set 'labs
+                               (agent-xyz999-elimina coord
+                                 (agent-xyz999-get 'labs mem1))
+                               mem1)))
+                          ;; Lab enemic o no capturat
+                          (t
+                           (agent-xyz999-set 'labs
+                             (agent-xyz999-afegir-coord coord
+                               (agent-xyz999-get 'labs mem1) 15)
+                             (agent-xyz999-set 'labs-a
+                               (agent-xyz999-elimina coord
+                                 (agent-xyz999-get 'labs-a mem1))
+                               mem1)))))
+                       (t mem1))))
+         (agent-xyz999-actualitza-mem (cdr vis) mem2 equip)))))
 
 
 ;; ======================================================================
-;; SECCIÓ 6: SISTEMA DE COLORS (lògica de quins colors falten)
+;; SECCIÓ 5: LÒGICA DE COLORS
 ;; ======================================================================
 
-(defun agent-xyz999-colors-falten (colors-pintats)
-  "Retorna la llista de colors (r g b) que NO estan a colors-pintats."
-  (let ((tots '(r g b)))
-    (agent-xyz999-filtra-no-presents tots colors-pintats)))
-
-(defun agent-xyz999-filtra-no-presents (tots pintats)
-  "Filtra de tots els que no estan a pintats."
+(defun agent-xyz999-filtra-falten (tots pintats)
+  "Retorna els colors de tots que NO estan a pintats.
+   tots: llista de colors. pintats: llista de colors pintats."
   (cond ((null tots) nil)
-        ((member (car tots) pintats) (agent-xyz999-filtra-no-presents (cdr tots) pintats))
-        (t (cons (car tots) (agent-xyz999-filtra-no-presents (cdr tots) pintats)))))
+        ((agent-xyz999-membre (car tots) pintats)
+         (agent-xyz999-filtra-falten (cdr tots) pintats))
+        (t (cons (car tots)
+                 (agent-xyz999-filtra-falten (cdr tots) pintats)))))
 
-(defun agent-xyz999-color-mes-util (colors-base-enemy color-propi)
-  "Retorna el color de bolla més útil per destruir la base enemiga.
-   El color de la bolla JA el té la base (color-propi de bolla). 
-   Però si la base enemiga no té el color de la nostra bolla, 
-   la nostra bolla ES útil atacant."
-  ;; Si la base enemiga no té el nostre color, el nostre color és útil
-  (cond ((not (member color-propi colors-base-enemy)) color-propi)
-        (t nil)))
-
-(defun agent-xyz999-tria-color-bolla (colors-base-enemy pintura ronda)
-  "Tria quin color de bolla crear per maximitzar el dany a la base enemiga.
-   Si es coneix la base enemiga, crea el color que li falta.
-   Sinó, alterna r-g-b cada torn per diversificar l'exèrcit."
-  (let ((falten (agent-xyz999-colors-falten colors-base-enemy)))
-    (cond 
-      ;; Si hi ha colors que falten a la base enemiga, crea'n un dels que falten
-      ((and colors-base-enemy (not (null falten))) (car falten))
-      ;; Si la base enemiga és desconeguda, alternem r-g-b cada torn
-      (t (nth (rem ronda 3) '(r g b))))))
+(defun agent-xyz999-tria-color (colors-be ronda)
+  "Tria el color de bolla a crear per destruir la base enemiga.
+   Quan la base té 2 colors, l'únic color útil és el kill color.
+   Quan té 1 o 0 colors, rota per crear un exèrcit divers i equilibrat.
+   colors-be: colors que JA TÉ la base enemiga. ronda: enter."
+  (let* ((falten (agent-xyz999-filtra-falten '(r g b) colors-be))
+         (n      (agent-xyz999-longitud falten)))
+    (cond
+      ;; Cas impossible (base ja destruïda), fallback
+      ((= n 0) (agent-xyz999-nth-safe (rem ronda 3) '(r g b)))
+      ;; UN ÚNIC COLOR POSSIBLE: el kill color, sempre!
+      ((= n 1) (car falten))
+      ;; Múltiples colors: rota per ronda per crear exèrcit equilibrat
+      (t (agent-xyz999-nth-safe (rem ronda n) falten)))))
 
 
 ;; ======================================================================
-;; SECCIÓ 7: FILTRATGE DE CASELLES MOVIBLES
+;; SECCIÓ 6: ROLS I DESTINS
 ;; ======================================================================
 
-(defun agent-xyz999-es-movible (casella coord-actual)
-  "Retorna t si la casella és terra buida dins rang de moviment (dist² ≤ 2)."
-  (and (not (null casella))
-       (>= (agent-xyz999-longitud casella) 2)
-       (eq (nth 1 casella) 'terra)
-       (null (nth 3 casella))   ; Ha d'estar buida (cap element)
-       (<= (agent-xyz999-dist-q (nth 0 casella) coord-actual) 2)
-       (not (equal (nth 0 casella) coord-actual))))
+(defun agent-xyz999-rol (id)
+  "Assigna un rol a la unitat per ID mod 3:
+     0 → atacant   (rush base enemiga, explora si no la coneix)
+     1 → chassador (captura el lab MÉS PROPER, defensa labs aliats)
+     2 → explorador (cobreix el mapa, s'uneix a l'atac si la base és visible)
+   id: enter (id-unitat)."
+  (rem (agent-xyz999-abs id) 3))
 
-(defun agent-xyz999-filtra-movibles (visio coord-actual)
-  "Retorna les caselles de la visió on la bolla es pot moure."
-  (cond ((null visio) nil)
-        ((agent-xyz999-es-movible (car visio) coord-actual)
-         (cons (car visio) (agent-xyz999-filtra-movibles (cdr visio) coord-actual)))
-        (t (agent-xyz999-filtra-movibles (cdr visio) coord-actual))))
-
-(defun agent-xyz999-casella-propi-color (casella color-propi)
-  "Retorna t si la casella és del color propi de la bolla."
-  (eq (agent-xyz999-vis-color-terra casella) color-propi))
-
-
-;; ======================================================================
-;; SECCIÓ 8: SISTEMA DE NAVEGACIÓ GREEDY
-;; ======================================================================
-
-(defun agent-xyz999-cost-pas (casella desti color-propi visited ignora-rastre)
-  "Cost heurístic d'un pas: distància al destí + penalització si no és del propi color.
-   Si ignora-rastre és nil, aplica penalització de visited per explorar."
-  (let* ((coord (agent-xyz999-vis-coord casella))
-         (color-terra (agent-xyz999-vis-color-terra casella))
-         (dist (agent-xyz999-dist-q coord desti))
-         ;; Penalització alta si terra d'altre color (x3 cooldown real)
-         (pena-color (cond ((eq color-terra color-propi) 0) (t 500)))
-         ;; Penalització de rastre: Només s'aplica si NO estem en "mode atac/rush"
-         (pena-rastre (cond ((and (not ignora-rastre)
-                                  (agent-xyz999-membre-igual coord visited)) 2000)
-                            (t 0))))
-    (+ (* dist 10) pena-color pena-rastre)))
-
-(defun agent-xyz999-millor-pas (movibles desti color-propi visited ignora-rastre millor-coord millor-cost)
-  "Cerca greedy la casella movible de menor cost cap al destí."
-  (cond ((null movibles) millor-coord)
-        (t (let* ((casella (car movibles))
-                  (cost (agent-xyz999-cost-pas casella desti color-propi visited ignora-rastre)))
-             (cond ((< cost millor-cost)
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited ignora-rastre
-                                             (agent-xyz999-vis-coord casella) cost))
+(defun agent-xyz999-lab-mes-proper (labs coord best-coord best-dist)
+  "Retorna la coordenada del lab de la llista MÉS PROPER a coord.
+   labs: llista de coordenades de labs.
+   coord: posició actual (x y).
+   best-coord, best-dist: millor resultat acumulat (inicialitzar a nil, 1000000)."
+  (cond ((null labs) best-coord)
+        (t (let ((d (agent-xyz999-dist-q (car labs) coord)))
+             (cond ((< d best-dist)
+                    (agent-xyz999-lab-mes-proper
+                      (cdr labs) coord (car labs) d))
                    (t
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited ignora-rastre
-                                             millor-coord millor-cost)))))))
+                    (agent-xyz999-lab-mes-proper
+                      (cdr labs) coord best-coord best-dist)))))))
 
+(defun agent-xyz999-vector-exploracio (id ronda base-ally)
+  "Genera un punt d'exploració llunyà en un sector únic per ID.
+   Distància 1000u → obliga a la bolla a creuar tot el mapa en la seva direcció.
+   La direcció canvia cada 60 rondes per cobrir noves zones.
+   id: enter. ronda: enter. base-ally: (x y) o nil."
+  (let* ((dir8  '((1 0)(1 1)(0 1)(-1 1)(-1 0)(-1 -1)(0 -1)(1 -1)))
+         ;; Fase més lenta (60 rondes) per una exploració més decidida
+         (fase  (/ ronda 60))
+         (idx   (rem (+ (agent-xyz999-abs id) fase) 8))
+         (dir   (agent-xyz999-nth-safe idx dir8))
+         (bx    (cond ((and base-ally (car base-ally)) (car base-ally)) (t 500)))
+         (by    (cond ((and base-ally (cadr base-ally)) (cadr base-ally)) (t 500))))
+    (cond ((null dir) (list bx by))
+          ;; Destí molt llunyà per assegurar que la bolla no s'aturi mai
+          (t (list (+ bx (* (car dir) 1000))
+                   (+ by (* (cadr dir) 1000)))))))
 
-;; ======================================================================
-;; SECCIÓ 9: SISTEMA D'EXPLORACIÓ DISPERSA
-;; ======================================================================
-
-(defun agent-xyz999-vector-exploracio (id-unitat ronda coord-base)
-  "Genera un vector d'exploració ÚNIC per a cada bolla en cada fase.
-   Usa l'ID i la ronda per dispersar les bolles en 8 directions + variació.
-   Això evita que totes les bolles vagin al mateix punt."
-  (let* (;; 8 direccions base (octants)
-         (dir8 (list (list  1  0) (list  1  1) (list  0  1) (list -1  1)
-                     (list -1  0) (list -1 -1) (list  0 -1) (list  1 -1)))
-         ;; Seleccionem una direcció combinant ID i fase de ronda
-         (fase-idx (cond ((< ronda 200) 0) ((< ronda 500) 1) ((< ronda 800) 2) (t 3)))
-         ;; Rotació per fase per forçar canvis d'estratègia
-         (idx-dir (rem (+ (agent-xyz999-abs id-unitat) (* fase-idx 2)) 8))
-         (dir (agent-xyz999-nth-safe idx-dir dir8))
-         ;; Distància de 300-600 unitats per ser fora del rang de visió
-         (dist (+ 300 (* (rem (agent-xyz999-abs id-unitat) 4) 100)))
-         (bx (cond (coord-base (car coord-base)) (t 500)))
-         (by (cond (coord-base (cadr coord-base)) (t 500))))
-    (list (+ bx (* (car dir) dist))
-          (+ by (* (cadr dir) dist)))))
-
-(defun agent-xyz999-desti-bolla (coord mem id-unitat ronda equip visio rol)
-  "Decideix cap a on ha d'anar una bolla.
-   PRIORITAT: Base enemiga > Objectiu visible > Labs en memòria > Explorar."
-  (let* ((base-enemy (agent-xyz999-get-mem 'base-enemy mem))
-         (labs       (agent-xyz999-get-mem 'labs mem))
-         (proper-vis (agent-xyz999-busca-objectiu-visio visio equip coord))
-         (n-labs (agent-xyz999-longitud labs)))
+(defun agent-xyz999-desti-bolla (mem id ronda coord)
+  "Determina el destí prioritari de la bolla segons el seu rol.
+   Atacant (0):    base-enemy → explorar.
+   Chassador (1):  labs-enemy (el més proper) → labs-a (defensa) → base-enemy → explorar.
+   Explorador (2): base-enemy (si visible) → explorar.
+   Resultat: 2/3 de les unitats atacaran la base quan sigui visible,
+             1/3 mantindran flux de pintura capturant/defensant labs.
+   mem: a-list. id: enter. ronda: enter. coord: (x y) posició actual."
+  (let* ((rol        (agent-xyz999-rol id))
+         (base-enemy (agent-xyz999-get 'base-enemy mem))
+         (labs       (agent-xyz999-get 'labs mem))
+         (labs-a     (agent-xyz999-get 'labs-a mem))
+         (base-ally  (agent-xyz999-get 'base-ally mem))
+         (n-labs     (agent-xyz999-longitud labs))
+         (n-labs-a   (agent-xyz999-longitud labs-a)))
     (cond
-      ;; 1. Si coneixem la BASE ENEMIGA, anem-hi (Rush)!
-      (base-enemy base-enemy)
-      
-      ;; 2. Si veiem quelcom interessant (Base o Lab) ara mateix
-      (proper-vis proper-vis)
-      
-      ;; 3. Si coneixem laboratoris, anem-hi per ID per dispersar-nos
-      ((and labs (> n-labs 0))
-       (agent-xyz999-nth-safe (rem (agent-xyz999-abs id-unitat) n-labs) labs))
-      
-      ;; 4. Altrament, exploració dispersa
-      (t (agent-xyz999-vector-exploracio id-unitat ronda coord)))))
+      ;; ROL 0 - ATACANT: rush directe a base enemiga si la coneix
+      ((and (= rol 0) base-enemy) base-enemy)
 
-(defun agent-xyz999-filtra-visio-tipus (visio tipus equip)
-  "Filtra caselles de la visió per tipus d'element (enemic o neutral)."
-  (cond ((null visio) nil)
-        (t (let* ((c (car visio))
-                  (elem (agent-xyz999-vis-element c))
-                  (eq-c (agent-xyz999-vis-equip c)))
-             (cond ((and (eq elem tipus) (not (eq eq-c equip)))
-                    (cons c (agent-xyz999-filtra-visio-tipus (cdr visio) tipus equip)))
-                   (t (agent-xyz999-filtra-visio-tipus (cdr visio) tipus equip)))))))
+      ;; ROL 1 - CHASSADOR: tria lab per ID per dispersar l'equip
+      ((and (= rol 1) (> n-labs 0))
+       (agent-xyz999-nth-safe (rem (agent-xyz999-abs id) n-labs) labs))
 
-(defun agent-xyz999-busca-objectiu-visio (visio equip coord-actual)
-  "Busca el millor objectiu rellevant en visió. Prioritat: BASE > LAB."
-  (let ((bases (agent-xyz999-filtra-visio-tipus visio 'base equip))
-        (labs  (agent-xyz999-filtra-visio-tipus visio 'lab equip)))
-    (cond (bases (agent-xyz999-vis-coord (car bases)))
-          (labs  (agent-xyz999-vis-coord (car labs)))
-          (t nil))))
+      ;; ROL 1 - CHASSADOR sense labs enemics: defensa labs aliats (dispersió)
+      ((and (= rol 1) (> n-labs-a 0))
+       (agent-xyz999-nth-safe (rem (agent-xyz999-abs id) n-labs-a) labs-a))
+
+      ;; ROL 1 - CHASSADOR sense labs: s'uneix a l'atac
+      ((and (= rol 1) base-enemy) base-enemy)
+
+      ;; ROL 2 - EXPLORADOR: si base visible, s'uneix a l'atac
+      ((and (= rol 2) base-enemy) base-enemy)
+
+      ;; TOTS: explorar en el sector assignat (base desconeguda o explorador sense base)
+      (t (agent-xyz999-vector-exploracio id ronda base-ally)))))
 
 
 ;; ======================================================================
-;; SECCIÓ 10: SISTEMA DE COMBAT (TRETS)
+;; SECCIÓ 7: NAVEGACIÓ
 ;; ======================================================================
 
-(defun agent-xyz999-punts-tret (casella equip color-propi coord-actual colors-base-enemy)
-  "Calcula la prioritat d'un tret a una casella (rang ≤ 5u²).
-   Retorna -1 si no s'ha de disparar, altrament un enter positiu."
-  (let* ((coord (agent-xyz999-vis-coord casella))
-         (dist (agent-xyz999-dist-q coord-actual coord))
-         (elem (agent-xyz999-vis-element casella))
-         (eq-c (agent-xyz999-vis-equip casella))
-         (colors-p (agent-xyz999-vis-colors-p casella))
-         (color-pr (agent-xyz999-vis-color-propi casella)))
+(defun agent-xyz999-movibles (vis coord)
+  "Retorna les caselles de vis on la bolla es pot moure:
+   terra buides, dins dist²≤2 de coord, i distintes de la posició actual.
+   vis: llista de caselles. coord: (x y) posició actual."
+  (cond
+    ((null vis) nil)
+    (t (let* ((c  (car vis))
+              (co (agent-xyz999-c-coord c)))
+         (cond ((and (eq (agent-xyz999-c-tipus c) 'terra)
+                     (null (agent-xyz999-c-elem c))
+                     (<= (agent-xyz999-dist-q co coord) 2)
+                     (not (equal co coord)))
+                (cons c (agent-xyz999-movibles (cdr vis) coord)))
+               (t (agent-xyz999-movibles (cdr vis) coord)))))))
+
+(defun agent-xyz999-cost-mov (casella desti color-propi)
+  "Cost d'un moviment a casella buscant arribar a desti.
+   Prefereix lleugerament caselles del color propi (+5 si és aliè),
+   però NO bloqueja el moviment: el joc ja penalitza amb cooldown x3.
+   Una penalització massa alta (ex: 100) faria que les bolles quedessin
+   atrapades dins la seva zona de color i no explorassin mai.
+   casella: casella de visió. desti: (x y). color-propi: 'r 'g o 'b."
+  (let ((coord (agent-xyz999-c-coord casella)))
+    (cond ((or (null coord) (null desti)) 1000000)
+          (t (+ (* (agent-xyz999-dist-q coord desti) 10)
+                ;; Preferència suau per color propi: +5 si és aliè.
+                ;; Prou petit per no bloquejar l'exploració.
+                (cond ((eq (agent-xyz999-c-color casella) color-propi) 0)
+                      (t 5)))))))
+
+(defun agent-xyz999-millor-mov (movibles desti color-propi best-coord best-cost)
+  "Cerca greedy la casella movible de menor cost cap a desti.
+   Retorna la coordenada (x y) de la millor casella, o nil si cap.
+   movibles: llista de caselles movibles. desti: (x y).
+   color-propi: 'r 'g o 'b. best-coord: millor coord fins ara. best-cost: cost mínim."
+  (cond
+    ((null movibles) best-coord)
+    (t (let ((cost (agent-xyz999-cost-mov (car movibles) desti color-propi)))
+         (cond ((< cost best-cost)
+                (agent-xyz999-millor-mov (cdr movibles) desti color-propi
+                                         (agent-xyz999-c-coord (car movibles)) cost))
+               (t
+                (agent-xyz999-millor-mov (cdr movibles) desti color-propi
+                                         best-coord best-cost)))))))
+
+
+;; ======================================================================
+;; SECCIÓ 8: SISTEMA DE COMBAT
+;; ======================================================================
+
+(defun agent-xyz999-prioritat-tret (casella equip color-propi dist)
+  "Calcula la prioritat d'un tret a una casella des de rang dist.
+   Retorna -1 si no s'ha de disparar; un enter positiu com a prioritat.
+   Escala de prioritats (de major a menor):
+     9000: kill shot base (2 colors, el nostre és el 3r → DESTRUÏDA!)
+     5000: segon color a la base (1 color ja pintat)
+     2000: primer color a la base (0 colors)
+      800: kill shot bolla (2 colors, el nostre és el 3r)
+      400: dany útil a bolla (li falta el nostre color)
+      200: captura lab enemic o neutral
+       -1: no disparar (fora rang, aliat, ja té el nostre color, buida)
+   casella: casella de visió. equip: 'e1/'e2. color-propi: 'r/'g/'b. dist: dist²."
+  (let* ((elem  (agent-xyz999-c-elem casella))
+         (eq-c  (agent-xyz999-c-equip casella))
+         (cp    (agent-xyz999-c-colors casella))
+         (n-cp  (agent-xyz999-longitud cp)))
     (cond
-      ;; Fora de rang de tret (5u²)
+      ;; Filtres bàsics: fora rang, no és terra, buida, o és aliada
       ((> dist 5) -1)
-      ;; Casella d'aigua: no es pot pintar
-      ((eq (agent-xyz999-vis-tipus casella) 'aigua) -1)
-      ;; Casella pròpia: no disparar mai a la pròpia casella en combat
-      ;; (excepció: pintar la pròpia casella per treure penalització, gestionat a part)
+      ((not (eq (agent-xyz999-c-tipus casella) 'terra)) -1)
       ((null elem) -1)
-      ;; MAI disparar a aliats
       ((eq eq-c equip) -1)
-      
-      ;; BASE ENEMIGA: prioritat màxima si el nostre color li falta
+
+      ;; BASE ENEMIGA: objectiu màxim
       ((eq elem 'base)
-       (cond ((not (member color-propi colors-p))
-              ;; Quants colors li falten? Més prop de morir = més prioritat
-              (let ((n-colors-te (agent-xyz999-longitud colors-p)))
-                (cond ((= n-colors-te 2) 10000) ; 3r color = mort imminent!
-                      ((= n-colors-te 1) 5000)
-                      (t 2000))))
-             ;; La base ja té el nostre color: no cal pintar-la
-             (t -1)))
-      
-      ;; BOLLA ENEMIGA: prioritat alta si quasi morta (2 colors = morirà amb 1 tret)
+       (cond
+         ;; Ja té el nostre color: inútil, no gastem cooldown
+         ((agent-xyz999-membre color-propi cp) -1)
+         ;; Té 2 colors i el nostre és el 3r → KILL SHOT!
+         ((= n-cp 2) 9000)
+         ;; Té 1 color: afegim el segon
+         ((= n-cp 1) 5000)
+         ;; Té 0 colors: primer cop
+         (t 2000)))
+
+      ;; BOLLA ENEMIGA
       ((eq elem 'bolla)
        (cond
-         ;; Bolla quasi morta: 1 tret la destrueix
-         ((and (member color-propi colors-p)
-               (= (agent-xyz999-longitud colors-p) 1)) -1) ; ja té el nostre color
-         ((= (agent-xyz999-longitud colors-p) 1) 800) ; li falta 1 color (pot ser el nostre)
-         ((not (member color-propi colors-p)) 400)    ; li falta el nostre
-         (t -1)))
-      
-      ;; LAB ENEMIC o neutral: prioritat mitja
+         ;; Ja té el nostre color: inútil
+         ((agent-xyz999-membre color-propi cp) -1)
+         ;; Té 2 colors i el nostre destruirà la bolla!
+         ((= n-cp 2) 800)
+         ;; Dany útil: li falta el nostre color
+         (t 400)))
+
+      ;; LAB enemic o no capturat: capturar per pintura addicional
       ((eq elem 'lab)
-       (cond ((not (eq eq-c equip)) 300)
+       (cond ((not (eq eq-c equip)) 200)
              (t -1)))
-      
+
       (t -1))))
 
-(defun agent-xyz999-millor-tret (visio equip color-propi coord-actual colors-base-enemy
-                                  millor-coord millor-punt)
-  "Cerca el millor objectiu per disparar. Retorna la coordenada o nil."
-  (cond ((null visio) millor-coord)
-        (t (let ((punt (agent-xyz999-punts-tret (car visio) equip color-propi
-                                                 coord-actual colors-base-enemy)))
-             (cond ((> punt millor-punt)
-                    (agent-xyz999-millor-tret (cdr visio) equip color-propi coord-actual
-                                              colors-base-enemy
-                                              (agent-xyz999-vis-coord (car visio)) punt))
-                   (t
-                    (agent-xyz999-millor-tret (cdr visio) equip color-propi coord-actual
-                                              colors-base-enemy millor-coord millor-punt)))))))
-
-
-;; ======================================================================
-;; SECCIÓ 11: LÒGICA DE PERILL I FUGIDA
-;; ======================================================================
-
-(defun agent-xyz999-es-en-perill (colors-pintat)
-  "Retorna t si la bolla té 2 colors pintats (un tret més la destrueix)."
-  (>= (agent-xyz999-longitud colors-pintat) 2))
-
-(defun agent-xyz999-desti-fugida (coord mem equip)
-  "Retorna cap on ha de fugir una bolla en perill: cap a la base aliada."
-  (let ((base-ally (agent-xyz999-get-mem 'base-ally mem)))
-    (cond (base-ally base-ally)
-          ;; Si no coneix la base aliada, va cap al centre del mapa conegut
-          (t (list (+ (car coord) (* -5 (agent-xyz999-signum (car coord))))
-                   (+ (cadr coord) (* -5 (agent-xyz999-signum (cadr coord)))))))))
-
-
-;; ======================================================================
-;; SECCIÓ 12: DECISIÓ DE LA BASE
-;; ======================================================================
-
-(defun agent-xyz999-millor-spawn (movibles desti visited)
-  "Troba la casella de spawn més propera al destí."
-  (cond ((null movibles) nil)
-        (t (agent-xyz999-millor-pas movibles desti 'cap visited t nil 1000000000))))
-
-(defun agent-xyz999-decisio-base (coord visio mem equip pintura ronda)
-  "Decisió de la base: crea una bolla si té prou pintura.
-   Tria el color més útil contra la base enemiga.
-   Spawn cap a la direcció de l'enemic o d'un lab."
+(defun agent-xyz999-millor-tret (vis equip color-propi coord best-coord best-punt)
+  "Cerca el millor objectiu per disparar en rang 5u² dins la visió vis.
+   Retorna la coordenada de l'objectiu o nil si cap tret és útil.
+   vis: llista caselles. equip: 'e1/'e2. color-propi: 'r/'g/'b.
+   coord: posició actual. best-coord: millor coord fins ara. best-punt: prioritat màxima."
   (cond
-    ;; No prou pintura: no crea res
-    ((< pintura 50) nil)
-    
-    (t (let* ((movibles (agent-xyz999-filtra-movibles visio coord))
-              (base-enemy (agent-xyz999-get-mem 'base-enemy mem))
-              (labs (agent-xyz999-get-mem 'labs mem))
-              (colors-base-enemy (agent-xyz999-get-mem 'colors-base-enemy mem))
-              
-              ;; Destí preferit per posicionar el spawn
-              (desti-spawn (cond (base-enemy base-enemy)
-                                 (labs (car labs))
-                                 (t (list (+ (car coord) 500) (+ (cadr coord) 500)))))
-              
-              ;; Color més útil per destruir la base enemiga
-              (color-nou (agent-xyz999-tria-color-bolla colors-base-enemy pintura ronda))
-              
-              ;; Millor posició de spawn: cap al destí (la base no necessita evitar visited, però el paràmetre és necessari)
-              (coord-spawn (agent-xyz999-millor-spawn movibles desti-spawn (agent-xyz999-get-mem 'visited mem))))
-          
-          (cond ((and coord-spawn color-nou)
-                 (list (list 'crea-bolla (list color-nou coord-spawn))))
-                (coord-spawn
-                 ;; Fallback: color r si res més
-                 (list (list 'crea-bolla (list 'r coord-spawn))))
-                (t nil))))))
+    ((null vis) best-coord)
+    (t (let* ((c    (car vis))
+              (dist (agent-xyz999-dist-q coord (agent-xyz999-c-coord c)))
+              (p    (agent-xyz999-prioritat-tret c equip color-propi dist)))
+         (cond ((> p best-punt)
+                (agent-xyz999-millor-tret (cdr vis) equip color-propi coord
+                                          (agent-xyz999-c-coord c) p))
+               (t
+                (agent-xyz999-millor-tret (cdr vis) equip color-propi coord
+                                          best-coord best-punt)))))))
 
 
 ;; ======================================================================
-;; SECCIÓ 13: DECISIÓ DE LA BOLLA
+;; SECCIÓ 9: DECISIÓ DE LA BOLLA
 ;; ======================================================================
 
-(defun agent-xyz999-casella-actual-a-visio (visio coord-actual)
-  "Cerca a la visió la casella que correspon a la posició actual de la bolla."
-  (cond ((null visio) nil)
-        ((equal (agent-xyz999-vis-coord (car visio)) coord-actual) (car visio))
-        (t (agent-xyz999-casella-actual-a-visio (cdr visio) coord-actual))))
+(defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure
+                                    vis mem id ronda)
+  "Cervell de la bolla: retorna la llista d'accions d'aquest torn.
+   Sempre intenta tret (si cooldown<1) I moviment (si cooldown<1) al mateix torn.
+   Tret i moviment són independents: ambdós es poden fer al mateix torn.
+   coord: (x y). equip: 'e1/'e2. color-propi: 'r/'g/'b.
+   tr-pintar, tr-moure: cooldowns (real o nil → tractat com 0).
+   vis: visió. mem: memòria. id: id-unitat. ronda: enter."
+  (let* (;; Cooldowns (nil = 0 per unitats noves)
+         (tp (cond (tr-pintar tr-pintar) (t 0)))
+         (tm (cond (tr-moure  tr-moure)  (t 0)))
 
-(defun agent-xyz999-decisio-bolla (coord equip color-propi colors-pintat
-                                    tr-pintar tr-moure visio mem id-unitat ronda)
-  "Cervell de la bolla. Decideix trets i moviment en un sol torn.
-   Lògica:
-   1. Si en perill: fuig prioritàriament.
-   2. Tret: cerca el millor objectiu al rang 5u².
-   3. Pinta la pròpia casella si no és del color propi (redueix penalitzacions).
-   4. Moviment: cap al destí segons el rol (evitant zones visitades recents).
-  "
-  (let* ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
-         (temps-moure  (cond (tr-moure tr-moure) (t 0)))
-         (en-perill    (agent-xyz999-es-en-perill colors-pintat))
-         (colors-base-enemy (agent-xyz999-get-mem 'colors-base-enemy mem))
-         (visited      (agent-xyz999-get-mem 'visited mem))
-         (rol          (agent-xyz999-rol id-unitat ronda))
-         
-         ;; --- TRET (si cooldown de pintar < 1) ---
-         (tret-coord (cond ((< temps-pintar 1)
-                            (agent-xyz999-millor-tret visio equip color-propi coord
-                                                      colors-base-enemy nil -1))
+         ;; TRET: cerca el millor objectiu en rang 5u² si el cooldown ho permet
+         (tret-coord (cond ((< tp 1)
+                            (agent-xyz999-millor-tret vis equip color-propi
+                                                      coord nil -1))
                            (t nil)))
-         (acc-tret (cond (tret-coord (list (list 'pinta (list tret-coord)))) (t nil)))
-         
-         ;; --- PINTA LA PRÒPIA CASELLA (si no és del propi color i no hem ja disparat) ---
-         (casella-actual (agent-xyz999-casella-actual-a-visio visio coord))
-         (color-terra-actual (cond (casella-actual 
-                                    (agent-xyz999-vis-color-terra casella-actual))
-                                   (t color-propi)))
-         (pinta-terra (cond ((and (null tret-coord)
-                                  (< temps-pintar 1)
-                                  casella-actual
-                                  (not (eq color-terra-actual color-propi)))
-                             (list (list 'pinta (list coord))))
-                            (t nil)))
-         (acc-pinta-terra (cond (pinta-terra pinta-terra) (t nil)))
-         
-         ;; --- MOVIMENT ---
-         (desti (cond (en-perill (agent-xyz999-desti-fugida coord mem equip))
-                      (t (agent-xyz999-desti-bolla coord mem id-unitat ronda equip visio rol))))
-         
-         ;; Si tenim un destí conegut (base enemiga o lab), ignorem el rastre per rushejar
-         (ignora-rastre (cond (en-perill nil)
-                              ((agent-xyz999-get-mem 'base-enemy mem) t)
-                              ((agent-xyz999-busca-objectiu-visio visio equip coord) t)
-                              (t nil)))
-         
-         (acc-mou (cond ((< temps-moure 1)
-                         (let* ((movibles (agent-xyz999-filtra-movibles visio coord))
-                                (millor (agent-xyz999-millor-pas movibles desti color-propi visited ignora-rastre nil 1000000000)))
-                           (cond (millor (list (list 'mou (list millor))))
+         (acc-tret (cond (tret-coord
+                          (list (list 'pinta (list tret-coord))))
+                         (t nil)))
+
+         ;; MOVIMENT: greedy cap al destí de rol si el cooldown ho permet
+         (desti   (agent-xyz999-desti-bolla mem id ronda coord))
+         (acc-mou (cond ((< tm 1)
+                         (let* ((movs (agent-xyz999-movibles vis coord))
+                                (m    (agent-xyz999-millor-mov movs desti
+                                                               color-propi
+                                                               nil 1000000000)))
+                           (cond (m (list (list 'mou (list m))))
                                  (t nil))))
                         (t nil))))
-    
-    ;; Combina totes les accions: tret (o pinta terra) + moviment
-    (append acc-tret acc-pinta-terra acc-mou)))
+
+    (append acc-tret acc-mou)))
 
 
 ;; ======================================================================
-;; SECCIÓ 14: PUNT D'ENTRADA PRINCIPAL
+;; SECCIÓ 10: DECISIÓ DE LA BASE
+;; ======================================================================
+
+(defun agent-xyz999-decisio-base (coord vis mem pintura ronda)
+  "La base crea una bolla per torn si té ≥ 50 pintura.
+   Tria el color que millor destruirà la base enemiga:
+     - 2 colors a la base enemiga → SEMPRE el kill color (l'únic útil).
+     - 1 o 0 colors → rota per crear exèrcit divers.
+   Spawn cap a la base enemiga (o labs) per guanyar posicionament.
+   coord: (x y) base. vis: visió. mem: memòria. pintura: enter. ronda: enter."
+  (cond
+    ;; Sense prou pintura: no fa res
+    ((< pintura 50) nil)
+    (t (let* ((colors-be  (agent-xyz999-get 'colors-base-enemy mem))
+              (base-enemy (agent-xyz999-get 'base-enemy mem))
+              (labs       (agent-xyz999-get 'labs mem))
+              ;; Color que destruirà la base enemiga (o equilibra l'exèrcit)
+              (color      (agent-xyz999-tria-color colors-be ronda))
+              ;; Destí de spawn: rotació de 8 direccions per evitar col·lisions a la porta
+              (desti-sp   (cond
+                            ;; Si sabem on és l'enemic, spawn cap a ell
+                            (base-enemy base-enemy)
+                            ;; Si no, rotem la direcció de spawn cada torn per no bloquejar la sortida
+                            (t (let* ((dir8 '((1 0)(1 1)(0 1)(-1 1)(-1 0)(-1 -1)(0 -1)(1 -1)))
+                                      (d    (agent-xyz999-nth-safe (rem ronda 8) dir8)))
+                                 (list (+ (cond ((and coord (car coord)) (car coord)) (t 500)) (* (car d) 5))
+                                       (+ (cond ((and coord (cadr coord)) (cadr coord)) (t 500)) (* (cadr d) 5)))))))
+              ;; Caselles buides adjacents (rang spawn = 2u²)
+              (movs       (agent-xyz999-movibles vis coord))
+              ;; Casella de spawn: la adjacent cap al destí de spawn
+              (spawn      (agent-xyz999-millor-mov movs desti-sp nil nil 1000000000)))
+         (cond
+           ((and spawn color)
+            (list (list 'crea-bolla (list color spawn))))
+           (t nil))))))
+
+
+;; ======================================================================
+;; SECCIÓ 11: PUNT D'ENTRADA PRINCIPAL
 ;; ======================================================================
 
 (defun agent-xyz999 (dades)
-  "Punt d'entrada de l'agent. Rep les dades del controlador i retorna accions.
-   Dades: (ronda equip pintura id-unitat tipus-unitat coordenada colors-pintat
-           color-propi tr-pintar tr-moure visio memoria-compartida)"
-  (let* ((ronda      (nth 0 dades))
-         (equip      (nth 1 dades))
-         (pintura    (nth 2 dades))
-         (id-unitat  (nth 3 dades))
-         (tipus      (nth 4 dades))
-         (coord      (nth 5 dades))
-         (colors-p   (nth 6 dades))
-         (color-propi (nth 7 dades))
-         (tr-pintar  (nth 8 dades))
-         (tr-moure   (nth 9 dades))
-         (visio      (nth 10 dades))
-         (mem-old    (nth 11 dades))
-         
-         ;; 1. Actualitzem la memòria amb el que veiem
-         (mem-1 (agent-xyz999-actualitza-mem-visio visio mem-old equip))
-         
-         ;; 2. Afegim la nostra posició actual al rastre (visited) per no trepitjar-nos
-         ;;    Limitem la llista a 100 elements per no matar el rendiment
-         (visited-old (agent-xyz999-get-mem 'visited mem-1))
-         (mem-2 (agent-xyz999-set-mem 'visited 
-                                      (cons coord (agent-xyz999-limita-llista visited-old 100))
-                                      mem-1))
+  "Punt d'entrada de l'agent. Cridat pel controlador per cada unitat cada torn.
+   Dades rebudes:
+     (ronda equip pintura id-unitat tipus-unitat coordenada colors-pintat
+      color-propi tr-pintar tr-moure visio memoria-compartida)
+   Retorna: llista d'accions que sempre inclou 'escriu-memoria al davant.
+   Passos:
+     1. Actualitza la memòria compartida amb la visió d'aquest torn.
+     2. Si som la base, registrem la nostra posició a base-ally.
+     3. Decidim les accions segons el tipus d'unitat i rol.
+     4. Retornem la memòria actualitzada + les accions."
+  (let* ((ronda       (nth 0  dades))
+         (equip       (nth 1  dades))
+         (pintura     (nth 2  dades))
+         (id          (nth 3  dades))
+         (tipus       (nth 4  dades))
+         (coord       (nth 5  dades))
+         (color-propi (nth 7  dades))
+         (tr-pintar   (nth 8  dades))
+         (tr-moure    (nth 9  dades))
+         (vis         (nth 10 dades))
+         (mem-old     (nth 11 dades))
 
-         ;; 3. Si soc la base, registro la meva posició per als defensors
-         (mem-nova (cond ((eq tipus 'base)
-                          (agent-xyz999-set-mem 'base-ally coord mem-2))
-                         (t mem-2)))
-         
-         ;; 3. Decidim les accions
+         ;; 1. Actualitza memòria: bases, labs enemics, labs aliats
+         (mem-vis (agent-xyz999-actualitza-mem vis mem-old equip))
+
+         ;; 2. La base sempre registra la seva pròpia posició
+         (mem-final (cond
+                      ((eq tipus 'base)
+                       (agent-xyz999-set 'base-ally coord mem-vis))
+                      (t mem-vis)))
+
+         ;; 3. Decidim les accions per tipus d'unitat
          (accions (cond
                     ((eq tipus 'base)
-                     (agent-xyz999-decisio-base coord visio mem-nova equip pintura ronda))
+                     (agent-xyz999-decisio-base coord vis mem-final pintura ronda))
                     ((eq tipus 'bolla)
-                     (agent-xyz999-decisio-bolla coord equip color-propi colors-p
-                                                  tr-pintar tr-moure visio mem-nova
-                                                  id-unitat ronda))
+                     (agent-xyz999-decisio-bolla coord equip color-propi
+                                                  tr-pintar tr-moure vis
+                                                  mem-final id ronda))
                     (t nil))))
-    
-    ;; 4. Sempre escrivim la memòria actualitzada, seguida de les accions
-    (append (list (list 'escriu-memoria (list mem-nova)))
+
+    ;; 4. Sempre escrivim la memòria (propagació entre totes les unitats) + accions
+    (append (list (list 'escriu-memoria (list mem-final)))
             accions)))
