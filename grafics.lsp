@@ -406,14 +406,14 @@
 ;;   fila-idx  - índex de fila actual
 ;;   m         - mida de casella en píxels
 ;;   offset-y  - desplaçament vertical (per reservar espai per la consola)
-(defun gr-dibuixa-columnes (fila col fila-idx m offset-y)
+(defun gr-dibuixa-columnes (fila col fila-idx m offset-x offset-y)
   (cond ((null fila) nil)
         (t
          (gr-dibuixa-casella (car fila)
-                             (* col m)
+                             (+ offset-x (* col m))
                              (+ offset-y (* fila-idx m))
                              m)
-         (gr-dibuixa-columnes (cdr fila) (+ col 1) fila-idx m offset-y))))
+         (gr-dibuixa-columnes (cdr fila) (+ col 1) fila-idx m offset-x offset-y))))
 
 ;; Dibuixa totes les files del mapa.
 ;; Paràmetres:
@@ -421,11 +421,11 @@
 ;;   fila-idx - índex de fila actual (comença a 0)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical
-(defun gr-dibuixa-files (mapa fila-idx m offset-y)
+(defun gr-dibuixa-files (mapa fila-idx m offset-x offset-y)
   (cond ((null mapa) nil)
         (t
-         (gr-dibuixa-columnes (car mapa) 0 fila-idx m offset-y)
-         (gr-dibuixa-files (cdr mapa) (+ fila-idx 1) m offset-y))))
+         (gr-dibuixa-columnes (car mapa) 0 fila-idx m offset-x offset-y)
+         (gr-dibuixa-files (cdr mapa) (+ fila-idx 1) m offset-x offset-y))))
 
 
 ;; ======================================================================
@@ -448,12 +448,12 @@
 ;;   x2, y2   - casella de destinació (col, row)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical del mapa
-(defun gr-dibuixa-fletxa (x1 y1 x2 y2 m offset-y)
+(defun gr-dibuixa-fletxa (x1 y1 x2 y2 m offset-x offset-y)
   (let* ((hm  (round (/ m 2)))
          ;; Centres de les dues caselles en coordenades de pantalla
-         (px1 (+ (* x1 m) hm))
+         (px1 (+ offset-x (* x1 m) hm))
          (py1 (+ offset-y (* y1 m) hm))
-         (px2 (+ (* x2 m) hm))
+         (px2 (+ offset-x (* x2 m) hm))
          (py2 (+ offset-y (* y2 m) hm))
          ;; Vector de la fletxa
          (ddx (- px2 px1))
@@ -468,7 +468,7 @@
 ;;   fletxes  - llista de (tipus coord-orig coord-dest)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical del mapa
-(defun gr-dibuixa-fletxes (fletxes m offset-y)
+(defun gr-dibuixa-fletxes (fletxes m offset-x offset-y)
   (cond ((null fletxes) nil)
         (t
          (let* ((f      (car fletxes))
@@ -483,8 +483,8 @@
            (cond ((eq tipus 'mou)   (color 230 115 20))
                  ((eq tipus 'pinta) (color 220 40  40))
                  (t                 (gr-color-gris)))
-           (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-y)
-           (gr-dibuixa-fletxes (cdr fletxes) m offset-y)))))
+           (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-x offset-y)
+           (gr-dibuixa-fletxes (cdr fletxes) m offset-x offset-y)))))
 
 
 ;; ======================================================================
@@ -589,11 +589,11 @@
 
     ;; === Fons fosc del HUD ===
     (gr-color-hud)
-    (gr-fill 0 hud-y 640 hud-h)
+    (gr-fill -10 hud-y 660 hud-h)
 
-    ;; === Franja lateral d'equip actiu (3px, tot l'alçada del HUD) ===
+    ;; === Franja lateral d'equip actiu (3px -> 5px per seguretat) ===
     (gr-aplica-color-equip equip-actiu)
-    (gr-fill 0 hud-y 3 hud-h)
+    (gr-fill -10 hud-y 10 hud-h)
 
     ;; === Equip 1 ===
     ;; Quadrat indicador (negre amb vora blanca)
@@ -636,8 +636,8 @@
     (gr-fill 422 (+ hud-y 2) 1 (- hud-h 4))
 
     ;; === Número de ronda: barra de progrés + text "Ronda: X/1500" ===
-    ;; Zona: x=428, amplada=190, hud-h total disponible
-    (gr-dibuixa-info-ronda 428 (+ hud-y 4) 190 hud-h ronda)
+    ;; Zona: x=424, amplada=194, hud-h total disponible
+    (gr-dibuixa-info-ronda 424 (+ hud-y 4) 194 hud-h ronda)
 
     ;; === Indicador de torn actiu (extrem dret) ===
     ;; Petit quadrat del color de l'equip actiu
@@ -648,7 +648,7 @@
 
     ;; === Línia separadora superior del HUD ===
     (color 55 55 75)
-    (gr-linia-h 0 hud-y 640)))
+    (gr-linia-h 0 (+ hud-y hud-h) 640)))
 
 
 ;; ======================================================================
@@ -683,9 +683,8 @@
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
   (let* ((files     (length mapa))
          (cols      (length (car mapa)))
-         ;; FIX: console-h augmentat de 18 a 26 px perquè la primera fila
-         ;;      del mapa no quedi tapada pel text de la consola de XLISP-PLUS.
-         (console-h 26)
+         ;; FIX: console-h augmentat a 28 per evitar col·lisió amb el text superior.
+         (console-h 30)
          ;; FIX: hud-h augmentat de 24 a 30 px per allotjar el text de ronda.
          (hud-h     30)
          ;; Zona disponible per al mapa (entre consola i HUD)
@@ -694,18 +693,23 @@
          (m-files   (floor (/ area-h (max 1 files))))
          (m-cols    (floor (/ 640    (max 1 cols))))
          (m         (max 1 (min m-files m-cols)))
-         ;; Posicions clau
-         (hud-y     (- 30 hud-h))      ; El HUD comença aquí
-         (offset-y  console-h))         ; El mapa comença aquí (sota la consola)
+         ;; Centratge vertical: repartim l'espai sobrant (extra-h).
+         ;; Usem 1/3 per la base per baixar-lo una mica més (evita "choca arriba").
+         (extra-h   (- area-h (* files m)))
+         (hud-y     0)                   ; HUD a la base de la pantalla
+         (offset-y  (+ hud-h (floor (/ extra-h 3))))
+         ;; Centratge horitzontal: repartim l'espai sobrant (extra-w)
+         (extra-w   (- 640 (* cols m)))
+         (offset-x  (floor (/ extra-w 2)))) ; Mapa centrat horitzontalment
 
     ;; Esborra tota la pantalla
     (cls)
 
     ;; 1. Dibuixa el mapa (entre la zona de consola i el HUD)
-    (gr-dibuixa-files mapa 0 m offset-y)
+    (gr-dibuixa-files mapa 0 m offset-x offset-y)
 
     ;; 2. Dibuixa les fletxes d'accions damunt del mapa
-    (gr-dibuixa-fletxes fletxes m offset-y)
+    (gr-dibuixa-fletxes fletxes m offset-x offset-y)
 
     ;; 3. Dibuixa el HUD (a la part inferior, sempre visible)
     (gr-dibuixa-hud ronda equip-actiu pint-e1 pint-e2 hud-y hud-h)))
