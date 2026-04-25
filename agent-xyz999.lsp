@@ -140,11 +140,12 @@
                 (mem-restant (agent-xyz999-actualitza-memoria (cdr visio) memoria el-meu-equip)))
            (cond
              ;; Si és un Lab neutral/enemic o una Base enemiga, l'afegim (si no hi és ja)
-             ((and element (not (eq equip-element el-meu-equip)) 
+              ((and element (not (eq equip-element el-meu-equip)) 
                    (or (eq element 'lab) (eq element 'base)))
-              (if (member coord mem-restant :test #'equal)
-                  mem-restant
-                  (cons coord mem-restant)))
+                (if (member coord mem-restant :test #'equal)
+                    mem-restant ;;si ja està en memoria retorna la memoria que ja tenim
+                (cons coord mem-restant)) ;;else retorna la cordenada nova + memoria que ja tenim
+              )
              
              ;; Si és un Lab NOSTRE (ja capturat), l'esborrem de la memòria perquè deixin d'anar-hi
              ((and (eq element 'lab) (eq equip-element el-meu-equip))
