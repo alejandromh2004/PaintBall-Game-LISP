@@ -102,8 +102,8 @@
           ;; Laboratoris neutrals o enemics
           ((eq element 'lab) 500)
           
-          ;; Bolles enemigues
-          ((eq element 'bolla) 100)
+          ;; Bolles enemigues: Ara amb més prioritat si estan a prop
+          ((eq element 'bolla) 800)
           (t -1))))
 
 (defun agent-xyz999-millor-tret (visio equip color coord-actual millor-coord millor-punt)
@@ -148,12 +148,30 @@
           ((= quadrant 2) (list (+ cx 1000) (- cy 1000)))
           (t              (list (- cx 1000) (- cy 1000))))))
 
-(defun agent-xyz999-tria-desti (coord-actual mem id-unitat)
-  "Elegeix cap a on ha de marxar la unitat (Base -> Lab -> Explorar)."
-  (let ((base-enemic (agent-xyz999-get-mem 'base mem))
-        (labs (agent-xyz999-get-mem 'labs mem)))
-    (cond (base-enemic base-enemic)
-          (labs (car labs))
+(defun agent-xyz999-busca-proxim (visio equip)
+  "Busca el primer objectiu d'interès (Base o Lab no propi) en el camp visual."
+  (cond ((null visio) nil)
+        (t (let* ((casella (car visio))
+                  (coord (car casella))
+                  (element (cadddr casella))
+                  (equip-el (nth 4 casella)))
+             (cond ((and element (not (eq equip-el equip)) 
+                         (or (eq element 'lab) (eq element 'base)))
+                    coord)
+                   (t (agent-xyz999-busca-proxim (cdr visio) equip)))))))
+
+(defun agent-xyz999-tria-desti (coord-actual mem id-unitat visio equip)
+  "Elegeix cap a on ha de marxar la unitat (Visió -> Base -> Lab -> Explorar)."
+  (let ((proper (agent-xyz999-busca-proxim visio equip))
+        (base-enemic (agent-xyz999-get-mem 'base mem))
+        (base-aliada (agent-xyz999-get-mem 'base-aliada mem))
+        (labs (agent-xyz999-get-mem 'labs mem))
+        (es-defensor (and id-unitat (= (rem id-unitat 5) 0))))
+    (cond (proper proper)                           ; 1. Si veig algo ara mateix, hi vaig.
+          ((and es-defensor base-aliada) base-aliada) ; 2. Si soc defensor, guardo la base.
+          (base-enemic base-enemic)                  ; 3. Prioritat atacar base coneguda.
+          (labs                                      ; 4. Repartir labs coneguts.
+           (nth (rem id-unitat (length labs)) labs))
           (t (agent-xyz999-punt-exploracio coord-actual id-unitat)))))
 
 (defun agent-xyz999-cost-pas (casella-desti desti-final el-meu-color)
@@ -179,13 +197,13 @@
 ;; CERVELL BASE I BOLLA
 ;; ----------------------------------------------------------------------
 
-(defun agent-xyz999-decisio-base (pintura coord visio mem)
+(defun agent-xyz999-decisio-base (pintura coord visio mem equip)
   "Crea bolles intel·ligentment posant-les al millor flanc envers els enemics."
   (cond ((>= pintura 50)
          (let ((movibles (agent-xyz999-filtra-movibles visio coord)))
            (cond ((null movibles) nil)
                  (t
-                  (let* ((desti (agent-xyz999-tria-desti coord mem 0))
+                  (let* ((desti (agent-xyz999-tria-desti coord mem 0 visio equip))
                          (millor-casella (agent-xyz999-millor-pas movibles desti 'cap nil 1000000000))
                          ;; Correcció del bug: millor-casella JA ÉS la coordenada
                          (coord-spawn (cond (millor-casella millor-casella) (t (car (car movibles)))))
@@ -193,12 +211,12 @@
                     (list (list 'crea-bolla (list color-nou coord-spawn))))))))
         (t nil)))
 
-(defun agent-xyz999-intentar-moure (coord temps-moure visio mem color-propi id-unitat)
+(defun agent-xyz999-intentar-moure (coord temps-moure visio mem color-propi id-unitat equip)
   "Aplica l'heurística A* Greedy de moviment."
   (cond ((< temps-moure 1)
          (let ((movibles (agent-xyz999-filtra-movibles visio coord)))
            (cond ((null movibles) nil)
-                 (t (let* ((desti (agent-xyz999-tria-desti coord mem id-unitat))
+                 (t (let* ((desti (agent-xyz999-tria-desti coord mem id-unitat visio equip))
                            (millor (agent-xyz999-millor-pas movibles desti color-propi nil 1000000000)))
                       ;; Correcció del bug: No fer car a millor
                       (cond (millor (list (list 'mou (list millor))))
@@ -215,10 +233,10 @@
        (let ((tret (agent-xyz999-millor-tret visio equip color-propi coord nil -1)))
          (cond (tret (list (list 'pinta (list tret))))
                ;; Si no hi ha res per disparar, ens movem
-               (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat)))))
+               (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat equip)))))
       
       ;; Si no podem disparar, intentem moure'ns
-      (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat)))))
+      (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat equip)))))
 
 ;; ----------------------------------------------------------------------
 ;; PUNT D'ENTRADA PRINCIPAL (INTERFÍCIE)
@@ -240,11 +258,15 @@
          (mem-antiga (nth 11 dades))
          
          ;; Actualitzar la intel·ligència de xarxa amb el que veu aquesta unitat
-         (mem-nova (agent-xyz999-actualitza-memoria visio mem-antiga equip))
+         (mem-1 (agent-xyz999-actualitza-memoria visio mem-antiga equip))
+         
+         ;; Si soc la base, registro la meva posició a la llibreta per als defensors
+         (mem-nova (cond ((eq tipus-unitat 'base) (agent-xyz999-set-mem 'base-aliada coord mem-1))
+                         (t mem-1)))
          
          ;; Prendre l'acció
          (accio (cond ((eq tipus-unitat 'base)
-                       (agent-xyz999-decisio-base pintura coord visio mem-nova))
+                       (agent-xyz999-decisio-base pintura coord visio mem-nova equip))
                       ((eq tipus-unitat 'bolla)
                        (agent-xyz999-decisio-bolla coord equip color-propi tr-pintar tr-moure visio mem-nova id-unitat))
                       (t nil))))
