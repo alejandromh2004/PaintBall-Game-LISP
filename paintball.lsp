@@ -156,7 +156,7 @@
     (t 
      ;; FIX: El prompt ara mostra el número de ronda clarament.
      ;; Això és especialment útil perquè el HUD pot trigar a refrecar-se.
-     (format t "~%Ronda ~A/1500 | E1:~A | E2:~A >> [ENTER/b/q]: " ronda pint-e1 pint-e2)
+      (format t "~%Ronda ~A/1500~%E1: ~A~%E2: ~A~%[ENTER/b/q]: " ronda pint-e1 pint-e2)
      (let* ((input (read-line))
             (cmd (cond ((string-equal input "b") 'b)
                        ((string-equal input "q") 'q)

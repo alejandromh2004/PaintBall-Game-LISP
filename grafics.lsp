@@ -683,8 +683,8 @@
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
   (let* ((files     (length mapa))
          (cols      (length (car mapa)))
-         ;; FIX: console-h augmentat a 28 per evitar col·lisió amb el text superior.
-         (console-h 30)
+         ;; FIX: console-h augmentat a 70 per encabir el prompt de 4 línies.
+         (console-h 70)
          ;; FIX: hud-h augmentat de 24 a 30 px per allotjar el text de ronda.
          (hud-h     30)
          ;; Zona disponible per al mapa (entre consola i HUD)
