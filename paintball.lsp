@@ -345,7 +345,7 @@
          (rang-visio (cond ((eq tipus-unitat 'base) 64)
                            ((eq tipus-unitat 'bolla) 20)
                            (t 0)))
-                           
+                            
          ;; Calculem què veu aquesta unitat des de la seva posició (aplicant dx/dy a la visió)
          (visio (visio-mapa mapa x y rang-visio 0 dx dy))
          
@@ -367,28 +367,20 @@
           memoria)))
 
 (defun demana-accions-agent (dades-empaquetades)
-  "Crida a l'agent i unifica el format perquè tots retornin (accions memòria)."
-  (let ((equip (cadr dades-empaquetades))
-        (memoria-actual (nth 11 dades-empaquetades))) ; Recuperem la memòria actual (índex corregit)
-    
+  "Crida a l'agent i retorna la llista d'accions."
+  (let ((equip (nth 1 dades-empaquetades)))
     (cond 
-      ;; Si és l'agent ANTIC (abc123), només retorna accions, així que li peguem la memòria nosaltres
-      ((eq equip 'e1) 
-       (list (agent-abc123 dades-empaquetades) memoria-actual))
-      
-      ;; Si és el NOU agent (xyz999), ell ja retorna (accions nova-memòria)
-      ((eq equip 'e2) 
-       (agent-xyz999 dades-empaquetades))
-      
-      (t (list nil memoria-actual)))))
+      ((eq equip 'e1) (agent-abc123 dades-empaquetades))
+      ((eq equip 'e2) (agent-xyz999 dades-empaquetades))
+      (t nil))))
 
 ;; ======================================================================
 ;; PROCESSADOR D'ACCIONS
 ;; ======================================================================
 
-(defun-tco aplica-accions (accions mapa pintura equip coord-origen ronda dx dy)
-  "Aplica recursivament una llista d'accions retornant el nou (mapa pintura)."
-  (cond ((null accions) (list mapa pintura))
+(defun-tco aplica-accions (accions mapa pintura memoria equip coord-origen ronda dx dy)
+  "Aplica recursivament una llista d'accions retornant el nou (mapa pintura memoria)."
+  (cond ((null accions) (list mapa pintura memoria))
         (t
          (let* ((accio (car accions))
                 (tipus-accio (car accio))
@@ -413,8 +405,8 @@
                               (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 id-unitat))
                               (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella))
                               (nova-pintura (- pintura 50)))
-                         (aplica-accions (cdr accions) nou-mapa nova-pintura equip coord-origen ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa nova-pintura memoria equip coord-origen ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: MOU
@@ -451,8 +443,8 @@
                               (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure id-unitat))
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-ocupat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura equip (list dest-x dest-y) ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip (list dest-x dest-y) ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: PINTA
@@ -502,23 +494,29 @@
                               
                               (desti-actualitzat 
                                (cond 
-                                 (explota 
-                                  (list 'terra color-tirador nil nil nil nil nil nil))
-                                 ((eq element-desti 'lab)
-                                  (list 'terra color-tirador 'lab equip-tirador nil nil nil nil))
-                                 (t
-                                  (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti (nth 8 casella-desti)))))
+                                  (explota 
+                                   (list 'terra color-tirador nil nil nil nil nil nil))
+                                  ((eq element-desti 'lab)
+                                   (list 'terra color-tirador 'lab equip-tirador nil nil nil nil))
+                                  (t
+                                   (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti (nth 8 casella-desti)))))
                               
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura equip coord-origen ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip coord-origen ronda dx dy)))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
              
+             ;; ---------------------------------------------------------
+             ;; ACCIÓ: ESCRIU-MEMORIA
+             ;; ---------------------------------------------------------
+             ((eq tipus-accio 'escriu-memoria)
+              (let ((nova-mem (car args)))
+                (aplica-accions (cdr accions) mapa pintura nova-mem equip coord-origen ronda dx dy)))
+
              ;; ---------------------------------------------------------
              ;; IGNORAR ALTRES ACCIONS
              ;; ---------------------------------------------------------
-             (t (aplica-accions (cdr accions) mapa pintura equip coord-origen ronda dx dy)))))))
-
+             (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))))
 
 (defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria dx dy)
   "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
@@ -530,24 +528,23 @@
                 ;; 1. Empaquetem el que veu aquesta unitat (amb desplazamiento)
                 (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y dx dy))
                 
-                ;; 2. Cridem l'agent intel·ligent (que ara sempre retorna una llista de 2 elements)
-                (resposta-agent (demana-accions-agent dades))
-                (accions (car resposta-agent))        ;; El primer element són les accions
-                (nova-memoria (cadr resposta-agent))  ;; El segon element és la llibreta actualitzada!
+                ;; 2. Cridem l'agent intel·ligent (que ara retorna només la llista d'accions)
+                (accions (demana-accions-agent dades))
                 
                 ;; 3. Apliquem les accions al mapa (des-desplaçant abans)
-                (resultat-accions (aplica-accions accions mapa pintura equip coord ronda dx dy))
+                (resultat-accions (aplica-accions accions mapa pintura memoria equip coord ronda dx dy))
                 (mapa-post-accions (car resultat-accions))
-                (pintura-post-accions (cadr resultat-accions)))
+                (pintura-post-accions (cadr resultat-accions))
+                (memoria-post-accions (caddr resultat-accions)))
            
            ;; 4. Crida recursiva per a la següent unitat! 
-           ;; ATENCIÓ: Li passem la NOVA-MEMORIA perquè la següent bolla ja sàpiga el que ha vist aquesta!
+           ;; ATENCIÓ: Li passem la MEMORIA-POST-ACCIONS perquè la següent bolla ja sàpiga el que ha vist aquesta!
            (processa-totes-les-unitats (cdr unitats) 
                                        mapa-post-accions 
                                        ronda 
                                        pintura-post-accions 
                                        equip 
-                                       nova-memoria
+                                       memoria-post-accions
                                        dx
                                        dy)))))
 

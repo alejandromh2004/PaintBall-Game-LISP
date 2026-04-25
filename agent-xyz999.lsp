@@ -126,9 +126,9 @@
                        (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure visio memoria-nova))
                       (t nil))))
     
-    ;; 3. Retornem l'acció EXACTAMENT com la demana el controlador
-    ;; Retornem una llista amb l'acció original i la llibreta actualitzada
-    (list accio memoria-nova)))
+    ;; 3. Retornem la llista d'accions (incloent l'actualització de memòria)
+    (append (list (list 'escriu-memoria (list memoria-nova)))
+            accio)))
 
 ;; ----------------------------------------------------------------------
 ;; FUNCIONS DE GESTIÓ DE MEMORIA
