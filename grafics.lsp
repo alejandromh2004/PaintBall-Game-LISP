@@ -269,14 +269,12 @@
     (gr-aplica-color-equip equip)
     (gr-fill ix iy sz sz)
 
-    ;; Vora doble per a visibilitat: 2 línies de contorn
-    (gr-aplica-color-equip-contrast equip)
+    ;; Vora del mateix color d'equip per a un aspecte sòlid
     (gr-stroke ix iy sz sz)
     (cond ((>= sz 6)
            (gr-stroke (+ ix 1) (+ iy 1) (- sz 2) (- sz 2))))
 
-    ;; Creu interior del color contrastat
-    (gr-aplica-color-equip-contrast equip)
+    ;; Creu interior del mateix color (sòlid)
     (gr-fill (- cx (round (/ gc 2))) iy gc sz)   ; Vertical
     (gr-fill ix (- cy (round (/ gc 2))) sz gc)   ; Horitzontal
 

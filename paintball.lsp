@@ -408,8 +408,8 @@
   "Crida a l'agent i retorna la llista d'accions."
   (let ((equip (nth 1 dades-empaquetades)))
     (cond 
-      ((eq equip 'e1) (agent-abc123 dades-empaquetades))
-      ((eq equip 'e2) (agent-xyz999 dades-empaquetades))
+      ((eq equip 'e1) (agent-xyz999 dades-empaquetades))
+      ((eq equip 'e2) (agent-abc123 dades-empaquetades))
       (t nil))))
 
 ;; ======================================================================
