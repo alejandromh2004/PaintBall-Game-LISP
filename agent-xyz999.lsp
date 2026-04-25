@@ -90,7 +90,7 @@
          (element (cadddr casella))
          (equip-obj (nth 4 casella))
          (colors-pintats (nth 5 casella)))
-    (cond ((> dist 25) -1) ; Massa lluny (5^2 = 25)
+    (cond ((> dist 5) -1) ; Massa lluny (5^2 = 25)
           ((null element) -1) ; Res a disparar
           ((eq equip-obj el-meu-equip) -1) ; Mai disparar a aliats
           
@@ -167,11 +167,10 @@
         (base-aliada (agent-xyz999-get-mem 'base-aliada mem))
         (labs (agent-xyz999-get-mem 'labs mem))
         (es-defensor (and id-unitat (= (rem id-unitat 5) 0))))
-    (cond (proper proper)                           ; 1. Si veig algo ara mateix, hi vaig.
-          ((and es-defensor base-aliada) base-aliada) ; 2. Si soc defensor, guardo la base.
-          (base-enemic base-enemic)                  ; 3. Prioritat atacar base coneguda.
-          (labs                                      ; 4. Repartir labs coneguts.
-           (nth (rem id-unitat (length labs)) labs))
+       (cond (proper proper)
+          ((and es-defensor base-aliada) (list (+ (car base-aliada) 3) (+ (cadr base-aliada) 3)))
+          (base-enemic base-enemic)
+          (labs (nth (rem id-unitat (length labs)) labs))
           (t (agent-xyz999-punt-exploracio coord-actual id-unitat)))))
 
 (defun agent-xyz999-cost-pas (casella-desti desti-final el-meu-color)
@@ -224,19 +223,16 @@
         (t nil)))
 
 (defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure visio mem id-unitat)
-  "Decideix si disparar a l'objectiu més crític, o avançar."
-  (let ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
-        (temps-moure (cond (tr-moure tr-moure) (t 0))))
-    (cond
-      ;; Prioritat Absoluta: Disparar (si cooldown ho permet)
-      ((< temps-pintar 1)
-       (let ((tret (agent-xyz999-millor-tret visio equip color-propi coord nil -1)))
-         (cond (tret (list (list 'pinta (list tret))))
-               ;; Si no hi ha res per disparar, ens movem
-               (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat equip)))))
-      
-      ;; Si no podem disparar, intentem moure'ns
-      (t (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat equip)))))
+  "Decideix disparar a l'objectiu més crític i, simultàniament, avançar si es pot."
+  (let* ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
+         (temps-moure (cond (tr-moure tr-moure) (t 0)))
+         ;; Intentem buscar tret i moviment per separat
+         (tret (cond ((< temps-pintar 1) (agent-xyz999-millor-tret visio equip color-propi coord nil -1)) (t nil)))
+         (accio-pinta (cond (tret (list (list 'pinta (list tret)))) (t nil)))
+         (accio-mou (agent-xyz999-intentar-moure coord temps-moure visio mem color-propi id-unitat equip)))
+    
+    ;; Així podem disparar i moure'ns en el mateix torn!
+    (append accio-pinta accio-mou)))
 
 ;; ----------------------------------------------------------------------
 ;; PUNT D'ENTRADA PRINCIPAL (INTERFÍCIE)
