@@ -14,14 +14,14 @@
 ;; de dibuixar el mapa, les unitats i la informació d'estat a la finestra.
 ;; ----------------------------------------------------------------------
 
-;; Variables globals per al dibuix (mida de la casella)
-(setq m 15) 
+;; Mida de la casella (es calcularà dinàmicament)
+;; Eliminem la variable global per seguir un enfocament purament funcional.
 
 ;; ======================================================================
 ;; FUNCIONS DE DIBUIX DE DANYS
 ;; ======================================================================
 
-(defun dibuixa-marca (color x y)
+(defun dibuixa-marca (color x y m)
   "Dibuixa un petit quadrat de 2x2 a la posició x,y per marcar dany."
   (cond ((eq color 'r) (RED))
         ((eq color 'g) (GREEN))
@@ -30,22 +30,22 @@
   (quadrat 2) ; Un quadrat petitó
   (moverel (- x) (- y))) ; Tornem a l'origen
 
-(defun dibuixa-danys (colors)
+(defun dibuixa-danys (colors m)
   "Dibuixa marques a les cantonades per cada color de dany rebut."
   (cond ((null colors) nil)
         (t
-         (let ((c (car colors)))
-           ;; Assignant cantonades segons el color
-           (cond ((eq c 'r) (dibuixa-marca 'r 1 1))                 ; Dalt-Esquerra
-                 ((eq c 'g) (dibuixa-marca 'g (- m 3) 1))           ; Dalt-Dreta
-                 ((eq c 'b) (dibuixa-marca 'b 1 (- m 3))))          ; Baix-Esquerra
-           (dibuixa-danys (cdr colors))))))
+          (let ((c (car colors)))
+            ;; Assignant cantonades segons el color
+            (cond ((eq c 'r) (dibuixa-marca 'r 1 1 m))                 ; Dalt-Esquerra
+                  ((eq c 'g) (dibuixa-marca 'g (- m 3) 1 m))           ; Dalt-Dreta
+                  ((eq c 'b) (dibuixa-marca 'b 1 (- m 3) m)))          ; Baix-Esquerra
+            (dibuixa-danys (cdr colors) m)))))
 
 ;; ======================================================================
 ;; PINTAR ELEMENTS
 ;; ======================================================================
 
-(defun pinta-element (casella)
+(defun pinta-element (casella m)
   "Tradueix la informació d'una casella a la pantalla"
   (let ((tipus (car casella)))
     (cond 
@@ -59,8 +59,8 @@
        (let ((color-terra (cadr casella))
              (element (caddr casella))
              (equip (cadddr casella))
-             (colors-pintat (nth 4 casella))  ; <--- Extraiem la llista de danys
-             (color-bolla (nth 5 casella)))   ; Aquest és el color propi ('r, 'g o 'b)
+             (colors-pintat (nth 4 casella))  
+             (color-bolla (nth 5 casella)))   
          
          ;; 1. Pintam el fons (la terra)
          (cond ((eq color-terra 'r) (RED))
@@ -74,60 +74,62 @@
            ((eq element 'base)
             (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
             (moverel 2 2)
-            (quadrat (- m 5))
+            (quadrat (max 1 (- m 5)))
             (moverel -2 -2))
            
            ;; --- LABORATORI ---
            ((eq element 'lab)
             (cond ((eq equip 'e1) (PINK))
                   ((eq equip 'e2) (BLACK))
-                  (t (color 128 128 128))) ; Groc fosc / Gris
-            (moverel 4 4)
-            (triangle (- m 8) (- m 8))
-            (moverel -4 -4))
+                  (t (color 128 128 128))) 
+            (moverel (round (/ m 4)) (round (/ m 4)))
+            (triangle (max 1 (- m (round (/ m 2)))) (max 1 (- m (round (/ m 2)))))
+            (moverel (- (round (/ m 4))) (- (round (/ m 4)))))
            
            ;; --- BOLLA ---
            ((eq element 'bolla)
-            ;; A. El contorn de la bolla és del seu color de pintura
             (cond ((eq color-bolla 'r) (RED))
                   ((eq color-bolla 'g) (GREEN))
                   ((eq color-bolla 'b) (BLUE)))
-            (moverel 3 3)
-            (quadrat (- m 7))
+            (moverel (round (/ m 4)) (round (/ m 4)))
+            (quadrat (max 1 (- m (round (/ m 2)))))
             
-            ;; B. El centre de la bolla ens diu de quin equip és
             (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
             (moverel 1 1)
-            (quadrat (- m 9))
-            
-            ;; Retornem el cursor a lloc
-            (moverel -4 -4)))
+            (quadrat (max 1 (- m (round (+ (/ m 2) 2)))))
+            (moverel (- (+ (round (/ m 4)) 1)) (- (+ (round (/ m 4)) 1)))))
          
          ;; 3. Finalment, pintem els indicadors de dany si n'hi ha
-         ;; Ho fem fora del cond anterior perquè es dibuixi per sobre de l'element
          (cond ((and element colors-pintat)
-                (dibuixa-danys colors-pintat))))))))
+                (dibuixa-danys colors-pintat m))))))))
 
 ;; ======================================================================
 ;; MOTORS DE DIBUIX
 ;; ======================================================================
 
-(defun pinta-columnes (fila x y)
+(defun pinta-columnes (fila x y m)
   "Recorre una fila (llista de caselles) d'esquerra a dreta"
   (cond ((null fila) nil)
         (t 
-         (move (* x m) (* y m))     ;; Ens col·locam a la coordenada (x, y) de la pantalla
-         (pinta-element (car fila)) ;; Pintam la casella actual
-         (pinta-columnes (cdr fila) (+ x 1) y)))) ;; Crida recursiva per a la següent columna
+         (move (* x m) (* y m))     
+         (pinta-element (car fila) m) 
+         (pinta-columnes (cdr fila) (+ x 1) y m)))) 
 
-(defun pinta-files (mapa y)
+(defun pinta-files (mapa y m)
   "Recorre el mapa (llista de files) de dalt a baix"
   (cond ((null mapa) nil)
         (t 
-         (pinta-columnes (car mapa) 0 y)  ;; Pintam tota la fila actual començant a x=0
-         (pinta-files (cdr mapa) (+ y 1))))) ;; Crida recursiva per a la següent fila
+         (pinta-columnes (car mapa) 0 y m)  
+         (pinta-files (cdr mapa) (+ y 1) m)))) 
 
 (defun dibuixa-mapa (mapa)
-  "Funció principal de gràfics que es cridarà des del controlador"
-  (cls)
-  (pinta-files mapa 0))
+  "Funció principal de gràfics. Calcula 'm' per fer cabre el mapa i evitar la consola."
+  (let* ((files (length mapa))
+         (cols (length (car mapa)))
+         ;; Deixem més espai (margin) per la consola i les puntuacions: 280px d'alçada útil
+         (m-files (floor (/ 280 files)))
+         (m-cols (floor (/ 630 cols)))
+         (m (max 1 (min m-files m-cols))))
+    (cls)
+    ;; Comencem a dibuixar a y=20 per deixar espai a les puntuacions de la part superior
+    (pinta-files mapa 0 m)))

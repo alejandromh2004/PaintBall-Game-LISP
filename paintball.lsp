@@ -44,19 +44,14 @@
 (load "proyectos/projecte_inicial/agent-xyz999.lsp")
 
 
-(defun inici ()
-  "Punt d'entrada del programa."
+(defun inici (&optional (fitxer "proyectos/projecte_inicial/maps/bait.map"))
+  "Punt d'entrada del programa. Pots passar-li el camí d'un fitxer de mapa."
   (BLACK) 
-  (mode 0 0 640 375) 
+  (mode 0 0 640 400) 
   
-  ;; Llegim el mapa del fitxer i el guardam localment
-  (let ((mapa-inicial (carrega-mapa "proyectos/projecte_inicial/maps/bait.map")))
-    
-    ;; Li passam el mapa al mòdul gràfic perquè el pinti
-    (inicia-partida mapa-inicial)
-    
-  )
-
+  (let ((mapa-inicial (carrega-mapa fitxer)))
+    (inicia-partida mapa-inicial))
+  
   (BLACK) 
   t)
 
@@ -109,15 +104,19 @@
   "Prepara l'estat inicial i llança el bucle principal de la partida."
   ;; Generem el desplazamiento aleatori fix per a tota la partida (Bug 6)
   (let ((dx (random 1000))
-        (dy (random 1000)))
+        (dy (random 1000))
+        (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
     (format t "~%[SISTEMA] Coordenades desplazades per dx=~A, dy=~A~%" dx dy)
-    (bucle-partida 1 (prepara-mapa-inicial mapa-inicial 0) 200 200 nil nil dx dy)))
+    ;; Paràmetres: ronda mapa p1 p2 m1 m2 dx dy historia skip-visual
+    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0)))
 
 
-(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual)
   "El motor principal del joc. S'executa recursivament a cada torn."
   
-  (dibuixa-mapa mapa)
+  ;; Dibuixem només si no estem saltant torns visuals
+  (cond ((<= skip-visual 0) (dibuixa-mapa mapa)))
+  
   (BLACK)
   (format t "~%--- RONDA ~A ---~%" ronda)
   (format t "Pintura E1: ~A | Pintura E2: ~A~%" pint-e1 pint-e2)
@@ -144,49 +143,52 @@
      (determina-guanyador-empat mapa pint-e1 pint-e2)
      'fi-de-partida)
         
-        (t 
-         (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1)
-                                   (t 'e2)))
-                
-                ;; 1. Sumem la pintura passiva
-                (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
-                (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2)))
-                
-                (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici)))
-                (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
-                
-                ;; 1.5. APLIQUEM EL DESCANS!
-                (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
-                
-                ;; 2. Busquem unitats
-                (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
-                
-                ;; 3. Processem accions
-                (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy))
-                
-                (nou-mapa (car estat-resultant))
-                (nova-pintura-equip (cadr estat-resultant))
-                (nova-memoria-equip (caddr estat-resultant))
-                
-                (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici)))
-                (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
-                (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
-                (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2))))
-           
-           ;; 4. PAUSA MANUAL CLÀSSICA
-           (BLACK)
-           (format t ">> TECLA 'Enter' PER PASSAR AL SEGUENT TORN")
-           (read-line)
-           
-           ;; 5. Crida recursiva neta (ara amb dx i dy)
-           (bucle-partida (+ ronda 1) 
-                          nou-mapa 
-                          nova-pint-e1 
-                          nova-pint-e2 
-                          nova-mem-e1 
-                          nova-mem-e2
-                          dx
-                          dy)))))
+    (t 
+     (format t "~%>> [ENTER=Endavant, b=Enrere]: ")
+     (let* ((input (read-line))
+            (cmd (cond ((string-equal input "b") 'b) (t 'f))))
+       
+       (cond 
+         ;; 1. BOTÓ ENRERE (b)
+         ((and (eq cmd 'b) historia)
+          (let ((estat-ant (car historia)))
+            (bucle-partida (car estat-ant) 
+                           (cadr estat-ant) 
+                           (caddr estat-ant) 
+                           (nth 3 estat-ant) 
+                           (nth 4 estat-ant) 
+                           (nth 5 estat-ant) 
+                           dx dy (cdr historia) 0)))
+         
+         ;; 2. BOTÓ ENDAVANT (ENTER o qualsevol altra cosa)
+         (t 
+          (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2)))
+                 (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
+                 (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2)))
+                 (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici)))
+                 (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
+                 (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
+                 (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
+                 (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy))
+                 (nou-mapa (car estat-resultant))
+                 (nova-pintura-equip (cadr estat-resultant))
+                 (nova-memoria-equip (caddr estat-resultant))
+                 (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici)))
+                 (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
+                 (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
+                 (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2)))
+                 (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia)))
+            
+            (bucle-partida (+ ronda 1) 
+                           nou-mapa 
+                           nova-pint-e1 
+                           nova-pint-e2 
+                           nova-mem-e1 
+                           nova-mem-e2
+                           dx
+                           dy
+                           nova-historia
+                           0))))))))
 
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
@@ -247,6 +249,8 @@
       ;; 3. Guanya un equip aleatòriament.
       (t (let ((guanyador (nth (random 2) '(e1 e2))))
            (format t "          GUANYA L'EQUIP ~A PER SORT!             ~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
+
+
 
 ;; ======================================================================
 ;; CERCA D'UNITATS
