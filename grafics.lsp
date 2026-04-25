@@ -681,23 +681,22 @@
 ;;                 pint-e1 pint-e2
 ;;                 fletxes-prev)
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
-  (let* ((files     (length mapa))
+    (let* ((files     (length mapa))
          (cols      (length (car mapa)))
-         ;; FIX: console-h augmentat a 70 per encabir el prompt de 4 línies.
-         (console-h 70)
-         ;; FIX: hud-h augmentat de 24 a 30 px per allotjar el text de ronda.
+         ;; Reduïm l'espai de consola a dalt per guanyar espai per al mapa
+         (console-h 30)
          (hud-h     30)
-         ;; Zona disponible per al mapa (entre consola i HUD)
+         ;; Zona disponible per al mapa (més gran ara)
          (area-h    (- 400 hud-h console-h))
          ;; Mida de casella: la mínima de les dues dimensions
          (m-files   (floor (/ area-h (max 1 files))))
          (m-cols    (floor (/ 640    (max 1 cols))))
          (m         (max 1 (min m-files m-cols)))
-         ;; Centratge vertical: repartim l'espai sobrant (extra-h).
-         ;; Usem 1/3 per la base per baixar-lo una mica més (evita "choca arriba").
+         ;; Espai sobrant vertical
          (extra-h   (- area-h (* files m)))
          (hud-y     0)                   ; HUD a la base de la pantalla
-         (offset-y  (+ hud-h (floor (/ extra-h 3))))
+         ;; Fixem el mapa a baix (sobre el HUD + 2px) perquè creixi cap amunt
+         (offset-y  (+ hud-h 2))
          ;; Centratge horitzontal: repartim l'espai sobrant (extra-w)
          (extra-w   (- 640 (* cols m)))
          (offset-x  (floor (/ extra-w 2)))) ; Mapa centrat horitzontalment
