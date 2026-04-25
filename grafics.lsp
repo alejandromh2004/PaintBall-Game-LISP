@@ -406,14 +406,14 @@
 ;;   fila-idx  - índex de fila actual
 ;;   m         - mida de casella en píxels
 ;;   offset-y  - desplaçament vertical (per reservar espai per la consola)
-(defun gr-dibuixa-columnes (fila col fila-idx m offset-x offset-y)
+(defun gr-dibuixa-columnes (fila col y-visual m offset-x offset-y)
   (cond ((null fila) nil)
         (t
          (gr-dibuixa-casella (car fila)
                              (+ offset-x (* col m))
-                             (+ offset-y (* fila-idx m))
+                             (+ offset-y (* y-visual m))
                              m)
-         (gr-dibuixa-columnes (cdr fila) (+ col 1) fila-idx m offset-x offset-y))))
+         (gr-dibuixa-columnes (cdr fila) (+ col 1) y-visual m offset-x offset-y))))
 
 ;; Dibuixa totes les files del mapa.
 ;; Paràmetres:
@@ -421,11 +421,12 @@
 ;;   fila-idx - índex de fila actual (comença a 0)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical
-(defun gr-dibuixa-files (mapa fila-idx m offset-x offset-y)
+(defun gr-dibuixa-files (mapa fila-idx m offset-x offset-y files)
   (cond ((null mapa) nil)
         (t
-         (gr-dibuixa-columnes (car mapa) 0 fila-idx m offset-x offset-y)
-         (gr-dibuixa-files (cdr mapa) (+ fila-idx 1) m offset-x offset-y))))
+         ;; Dibuixem la fila 'fila-idx' a la posició vertical invertida
+         (gr-dibuixa-columnes (car mapa) 0 (- files 1 fila-idx) m offset-x offset-y)
+         (gr-dibuixa-files (cdr mapa) (+ fila-idx 1) m offset-x offset-y files))))
 
 
 ;; ======================================================================
@@ -448,13 +449,13 @@
 ;;   x2, y2   - casella de destinació (col, row)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical del mapa
-(defun gr-dibuixa-fletxa (x1 y1 x2 y2 m offset-x offset-y)
+(defun gr-dibuixa-fletxa (x1 y1 x2 y2 m offset-x offset-y files)
   (let* ((hm  (round (/ m 2)))
-         ;; Centres de les dues caselles en coordenades de pantalla
+         ;; Centres de les dues caselles en coordenades de pantalla (Y INVERTIDA)
          (px1 (+ offset-x (* x1 m) hm))
-         (py1 (+ offset-y (* y1 m) hm))
+         (py1 (+ offset-y (* (- files 1 y1) m) hm))
          (px2 (+ offset-x (* x2 m) hm))
-         (py2 (+ offset-y (* y2 m) hm))
+         (py2 (+ offset-y (* (- files 1 y2) m) hm))
          ;; Vector de la fletxa
          (ddx (- px2 px1))
          (ddy (- py2 py1)))
@@ -468,7 +469,7 @@
 ;;   fletxes  - llista de (tipus coord-orig coord-dest)
 ;;   m        - mida de casella en píxels
 ;;   offset-y - desplaçament vertical del mapa
-(defun gr-dibuixa-fletxes (fletxes m offset-x offset-y)
+(defun gr-dibuixa-fletxes (fletxes m offset-x offset-y files)
   (cond ((null fletxes) nil)
         (t
          (let* ((f      (car fletxes))
@@ -479,12 +480,12 @@
                 (y1     (cadr orig))
                 (x2     (car desti))
                 (y2     (cadr desti)))
-           ;; Color de la fletxa: taronja per moviment, vermell per atac
-           (cond ((eq tipus 'mou)   (color 230 115 20))
-                 ((eq tipus 'pinta) (color 220 40  40))
-                 (t                 (gr-color-gris)))
-           (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-x offset-y)
-           (gr-dibuixa-fletxes (cdr fletxes) m offset-x offset-y)))))
+            ;; Color de la fletxa: taronja per moviment, vermell per atac
+            (cond ((eq tipus 'mou)   (color 230 115 20))
+                  ((eq tipus 'pinta) (color 220 40  40))
+                  (t                 (gr-color-gris)))
+            (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-x offset-y files)
+            (gr-dibuixa-fletxes (cdr fletxes) m offset-x offset-y files)))))
 
 
 ;; ======================================================================
@@ -705,10 +706,10 @@
     (cls)
 
     ;; 1. Dibuixa el mapa (entre la zona de consola i el HUD)
-    (gr-dibuixa-files mapa 0 m offset-x offset-y)
+    (gr-dibuixa-files mapa 0 m offset-x offset-y files)
 
     ;; 2. Dibuixa les fletxes d'accions damunt del mapa
-    (gr-dibuixa-fletxes fletxes m offset-x offset-y)
+    (gr-dibuixa-fletxes fletxes m offset-x offset-y files)
 
     ;; 3. Dibuixa el HUD (a la part inferior, sempre visible)
     (gr-dibuixa-hud ronda equip-actiu pint-e1 pint-e2 hud-y hud-h)))
