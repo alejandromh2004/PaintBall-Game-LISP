@@ -46,62 +46,56 @@
 ;; ======================================================================
 
 (defun pinta-element (casella m)
-  "Tradueix la informació d'una casella a la pantalla"
+  "Representació neta: fons blanc, vora negra, i fons de color només quan es pinta."
   (let ((tipus (car casella)))
     (cond 
-      ;; Si és aigua, la pintam de CYAN
+      ;; --- AIGUA (Sempre blava) ---
       ((eq tipus 'aigua)
-       (CYAN)
-       (quadrat-ple m)) 
+       (color 100 200 255) (quadrat-ple m)
+       (BLACK) (quadrat m))
       
-      ;; Si és terra, miram el color i què conté
+      ;; --- TERRA ---
       ((eq tipus 'terra)
        (let ((color-terra (cadr casella))
              (element (caddr casella))
              (equip (cadddr casella))
-             (colors-pintat (nth 4 casella))  
-             (color-bolla (nth 5 casella)))   
+             (colors-pintat (nth 4 casella))
+             (color-bolla (nth 5 casella)))
          
-         ;; 1. Pintam el fons (la terra)
-         (cond ((eq color-terra 'r) (RED))
-               ((eq color-terra 'g) (GREEN))
-               ((eq color-terra 'b) (BLUE)))
-         (quadrat (- m 1))
+         ;; Fons: Blanc per defecte, o color de l'última pintura si n'hi ha
+         (cond ((null colors-pintat) (color 255 255 255)) ; Blanc nuclear
+               ((member 'r colors-pintat) (color 255 200 200))
+               ((member 'g colors-pintat) (color 200 255 200))
+               ((member 'b colors-pintat) (color 200 200 255))
+               (t (color 255 255 255)))
+         (quadrat-ple m)
+         (BLACK) (quadrat m) ; Vora negra
          
-         ;; 2. Pintam l'element si n'hi ha (Base, Lab o Bolla)
+         ;; Elements (Bases, Labs, Bolles)
          (cond 
-           ;; --- BASE ---
            ((eq element 'base)
-            (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
-            (moverel 2 2)
-            (quadrat (max 1 (- m 5)))
-            (moverel -2 -2))
+            (cond ((eq equip 'e1) (color 255 0 255)) (t (BLACK)))
+            (moverel 2 2) (quadrat-ple (max 1 (- m 4))) (moverel -2 -2))
            
-           ;; --- LABORATORI ---
            ((eq element 'lab)
-            (cond ((eq equip 'e1) (PINK))
+            (cond ((eq equip 'e1) (color 255 0 255))
                   ((eq equip 'e2) (BLACK))
-                  (t (color 128 128 128))) 
+                  (t (color 220 220 220)))
             (moverel (round (/ m 4)) (round (/ m 4)))
-            (triangle (max 1 (- m (round (/ m 2)))) (max 1 (- m (round (/ m 2)))))
+            (triangle-ple (max 1 (- m (round (/ m 2)))) (max 1 (- m (round (/ m 2)))))
             (moverel (- (round (/ m 4))) (- (round (/ m 4)))))
            
-           ;; --- BOLLA ---
            ((eq element 'bolla)
             (cond ((eq color-bolla 'r) (RED))
                   ((eq color-bolla 'g) (GREEN))
                   ((eq color-bolla 'b) (BLUE)))
-            (moverel (round (/ m 4)) (round (/ m 4)))
-            (quadrat (max 1 (- m (round (/ m 2)))))
-            
-            (cond ((eq equip 'e1) (PINK)) (t (BLACK)))
-            (moverel 1 1)
-            (quadrat (max 1 (- m (round (+ (/ m 2) 2)))))
-            (moverel (- (+ (round (/ m 4)) 1)) (- (+ (round (/ m 4)) 1)))))
+            (moverel (round (/ m 3)) (round (/ m 3)))
+            (quadrat-ple (max 1 (- m (round (* 2 (/ m 3))))))
+            (cond ((eq equip 'e1) (color 255 255 255)) (t (BLACK)))
+            (moverel 1 1) (quadrat-ple (max 1 (- m (round (* 2.5 (/ m 3))))))
+            (moverel (- (+ (round (/ m 3)) 1)) (- (+ (round (/ m 3)) 1)))))
          
-         ;; 3. Finalment, pintem els indicadors de dany si n'hi ha
-         (cond ((and element colors-pintat)
-                (dibuixa-danys colors-pintat m))))))))
+         (cond ((and element colors-pintat) (dibuixa-danys colors-pintat m))))))))
 
 ;; ======================================================================
 ;; MOTORS DE DIBUIX
@@ -131,4 +125,4 @@
          (m-cols (floor (/ 630 cols)))
          (m (max 1 (min m-files m-cols))))
     (cls)
-    (pinta-files mapa 0 m)))
+    (pinta-files mapa 1 m)))

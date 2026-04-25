@@ -76,6 +76,20 @@
     (drawrel (- base) 0)
     (moverel 0 (- altura))))
 
+(defun triangle-ple (base altura)
+  "Dibuixa un triangle omplert de base i altura indicades."
+  (let ((meitat (round (/ base 2.0))))
+    (omple-tri base altura 0)
+    (moverel 0 (- altura))))
+
+(defun omple-tri (b h pas)
+  (cond ((>= pas h) nil)
+        (t (let ((w (round (* b (/ (- h pas) (float h))))))
+             (moverel (round (/ (- b w) 2.0)) 0)
+             (drawrel w 0)
+             (moverel (- (+ (round (/ (- b w) 2.0)) w)) 1)
+             (omple-tri b h (+ pas 1))))))
+
 (defun radians (graus)
   "Converteix graus a radians."
   (/ (* graus (* 2 pi)) 360.0))
