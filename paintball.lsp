@@ -253,9 +253,13 @@
            ;; La terra necessita tota la informació de l'element que hi ha a sobre
            (let ((color-casella (cadr casella))
                  (element (caddr casella))
-                 (equip (cadddr casella)))
+                 (equip (cadddr casella))
+                 (colors-pintat (nth 4 casella))
+                 (color-propi (nth 5 casella))
+                 (tr-p (nth 6 casella))
+                 (tr-m (nth 7 casella)))
              ;; Retornem: (coord-despla tipus color element equip colors-pintat color-propi tr-pintar tr-moure)
-             (list coord-despla tipus-casella color-casella element equip nil nil nil nil))))))
+             (list coord-despla tipus-casella color-casella element equip colors-pintat color-propi tr-p tr-m))))))
 
 (defun visio-fila (fila origen-x origen-y rang x y dx dy)
   "Recorre una fila i retorna només les caselles que estan dins del rang de visió."
