@@ -108,21 +108,20 @@
         (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
     (format t "~%[SISTEMA] Coordenades desplazades per dx=~A, dy=~A~%" dx dy)
     ;; Paràmetres: ronda mapa p1 p2 m1 m2 dx dy historia skip-visual
-    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0)))
+    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil)))
 
 
-(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual fletxes-prev)
   "El motor principal del joc. S'executa recursivament a cada torn."
   
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
        (dibuixa-mapa mapa ronda
                      (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
-                     pint-e1 pint-e2)))
+                     pint-e1 pint-e2 fletxes-prev)))
   
   (BLACK)
-  (format t "~%--- RONDA ~A ---~%" ronda)
-  (format t "Pintura E1: ~A | Pintura E2: ~A~%" pint-e1 pint-e2)
+  ;;(format t "~%R~A E1:~A E2:~A >> [ENTER / b / q]: " ronda pint-e1 pint-e2)
   
   (cond 
     ;; 1. VICTÒRIA EQUIP 2 (La base de l'E1 ha desaparegut)
@@ -168,7 +167,7 @@
                            (nth 3 estat-ant) 
                            (nth 4 estat-ant) 
                            (nth 5 estat-ant) 
-                           dx dy (cdr historia) 0)))
+                           dx dy (cdr historia) 0 nil)))
          
          ;; 2. BOTÓ ENDAVANT (ENTER o qualsevol altra cosa)
          (t 
@@ -179,7 +178,7 @@
                  (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
                  (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
                  (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
-                 (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy))
+                 (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy nil))
                  (nou-mapa (car estat-resultant))
                  (nova-pintura-equip (cadr estat-resultant))
                  (nova-memoria-equip (caddr estat-resultant))
@@ -187,8 +186,9 @@
                  (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
                  (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
                  (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2)))
-                 (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia)))
-            
+                 (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia))
+                 (nova-fletxes (nth 3 estat-resultant)))
+
             (bucle-partida (+ ronda 1) 
                            nou-mapa 
                            nova-pint-e1 
@@ -198,7 +198,7 @@
                            dx
                            dy
                            nova-historia
-                           0))))))))
+                           0 nova-fletxes))))))))
 
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
@@ -392,9 +392,9 @@
 ;; PROCESSADOR D'ACCIONS
 ;; ======================================================================
 
-(defun-tco aplica-accions (accions mapa pintura memoria equip coord-origen ronda dx dy)
+(defun-tco aplica-accions (accions mapa pintura memoria equip coord-origen ronda dx dy fletxes)
   "Aplica recursivament una llista d'accions retornant el nou (mapa pintura memoria)."
-  (cond ((null accions) (list mapa pintura memoria))
+  (cond ((null accions) (list mapa pintura memoria fletxes))
         (t
          (let* ((accio (car accions))
                 (tipus-accio (car accio))
@@ -419,8 +419,8 @@
                               (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 id-unitat))
                               (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella))
                               (nova-pintura (- pintura 50)))
-                         (aplica-accions (cdr accions) nou-mapa nova-pintura memoria equip coord-origen ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa nova-pintura memoria equip coord-origen ronda dx dy fletxes)))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: MOU
@@ -457,8 +457,8 @@
                               (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure id-unitat))
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-ocupat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip (list dest-x dest-y) ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip (list dest-x dest-y) ronda dx dy (cons (list 'mou coord-origen (list dest-x dest-y)) fletxes))))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: PINTA
@@ -517,24 +517,24 @@
                               
                               (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat)))
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip coord-origen ronda dx dy)))
-                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip coord-origen ronda dx dy (cons (list 'pinta coord-origen (list dest-x dest-y)) fletxes))))
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: ESCRIU-MEMORIA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'escriu-memoria)
               (let ((nova-mem (car args)))
-                (aplica-accions (cdr accions) mapa pintura nova-mem equip coord-origen ronda dx dy)))
+                (aplica-accions (cdr accions) mapa pintura nova-mem equip coord-origen ronda dx dy fletxes)))
 
              ;; ---------------------------------------------------------
              ;; IGNORAR ALTRES ACCIONS
              ;; ---------------------------------------------------------
-             (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy)))))))
+             (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))))
 
-(defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria dx dy)
+(defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria dx dy fletxes)
   "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
-  (cond ((null unitats) (list mapa pintura memoria))
+  (cond ((null unitats) (list mapa pintura memoria fletxes))
         (t
          (let* ((coord (car unitats))
                 (x (car coord))
@@ -546,11 +546,12 @@
                 (accions (demana-accions-agent dades))
                 
                 ;; 3. Apliquem les accions al mapa (des-desplaçant abans)
-                (resultat-accions (aplica-accions accions mapa pintura memoria equip coord ronda dx dy))
+                (resultat-accions (aplica-accions accions mapa pintura memoria equip coord ronda dx dy fletxes))
                 (mapa-post-accions (car resultat-accions))
                 (pintura-post-accions (cadr resultat-accions))
-                (memoria-post-accions (caddr resultat-accions)))
-           
+                (memoria-post-accions (caddr resultat-accions))
+                (fletxes-post-accions (nth 3 resultat-accions)))
+
            ;; 4. Crida recursiva per a la següent unitat! 
            ;; ATENCIÓ: Li passem la MEMORIA-POST-ACCIONS perquè la següent bolla ja sàpiga el que ha vist aquesta!
            (processa-totes-les-unitats (cdr unitats) 
@@ -560,7 +561,7 @@
                                        equip 
                                        memoria-post-accions
                                        dx
-                                       dy)))))
+                                       dy fletxes-post-accions)))))
 
 
 ;; ======================================================================
