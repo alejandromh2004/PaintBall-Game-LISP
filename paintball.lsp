@@ -74,12 +74,18 @@
 ;; ======================================================================
 
 (defun prepara-casella-inicial (casella x y)
-  "Afegeix un ID únic (0 x y) a les unitats inicials del mapa."
+  "Inicialitza unitats (ID únic i colors de dany segons l'enunciat)."
   (cond ((and (eq (car casella) 'terra) 
               (or (eq (caddr casella) 'base) (eq (caddr casella) 'bolla)))
-         (list 'terra (cadr casella) (caddr casella) (cadddr casella) 
-               (nth 4 casella) (nth 5 casella) (nth 6 casella) (nth 7 casella) 
-               (list 0 x y)))
+         (let* ((tipus (caddr casella))
+                (color-propi (nth 5 casella))
+                ;; Bases comencen sense estar pintades de cap color (nil)
+                ;; Bolles comencen pintades NOMÉS del seu color (list color-propi)
+                (colors-inicials (cond ((eq tipus 'base) nil)
+                                       (t (list color-propi)))))
+           (list 'terra (cadr casella) tipus (cadddr casella) 
+                 colors-inicials color-propi (nth 6 casella) (nth 7 casella) 
+                 (list 0 x y))))
         (t casella)))
 
 (defun prepara-fila-inicial (fila x y)
@@ -133,8 +139,7 @@
 
     ;; 3. EMPAT PER LÍMIT DE TORNS
     ((> ronda 1500)
-     (format t "~%Final de la partida: Límit de 1500 torns assolit!~%")
-     ;; Aquí més endavant podem cridar a la funció de desempat
+     (determina-guanyador-empat mapa pint-e1 pint-e2)
      'fi-de-partida)
         
         (t 
@@ -200,6 +205,46 @@
   (cond ((null mapa) 0)
         (t (+ (compta-bases-fila (car mapa) equip)
               (compta-bases-mapa (cdr mapa) equip)))))
+
+;; ======================================================================
+;; LÒGICA DE DESEMPAT (Obligatori)
+;; ======================================================================
+
+(defun compta-bolles-fila (fila equip)
+  "Compta quantes bolles té un equip en una fila."
+  (cond ((null fila) 0)
+        (t (let ((casella (car fila)))
+             (cond ((and (eq (car casella) 'terra)
+                         (eq (caddr casella) 'bolla)
+                         (eq (cadddr casella) equip))
+                    (+ 1 (compta-bolles-fila (cdr fila) equip)))
+                   (t (compta-bolles-fila (cdr fila) equip)))))))
+
+(defun compta-bolles-mapa (mapa equip)
+  "Compta quantes bolles té un equip en tot el mapa."
+  (cond ((null mapa) 0)
+        (t (+ (compta-bolles-fila (car mapa) equip)
+              (compta-bolles-mapa (cdr mapa) equip)))))
+
+(defun determina-guanyador-empat (mapa pint-e1 pint-e2)
+  "Aplica el criteri de desimpat de l'enunciat."
+  (let ((bolles-e1 (compta-bolles-mapa mapa 'e1))
+        (bolles-e2 (compta-bolles-mapa mapa 'e2)))
+    (format t "~%==================================================~%")
+    (format t "   FINAL PER LIMIT DE TORNS (1500) - DESEMPAT     ~%")
+    (format t "   Equip 1: ~A bolles | Equip 2: ~A bolles        ~%" bolles-e1 bolles-e2)
+    (format t "   Pintura 1: ~A    | Pintura 2: ~A               ~%" pint-e1 pint-e2)
+    (format t "==================================================~%")
+    (cond 
+      ;; 1. Guanya l'equip amb més bolles vives.
+      ((> bolles-e1 bolles-e2) (format t "           GUANYA L'EQUIP 1 PER BOLLES!           ~%"))
+      ((> bolles-e2 bolles-e1) (format t "           GUANYA L'EQUIP 2 PER BOLLES!           ~%"))
+      ;; 2. Guanya l'equip amb més reserva de pintura.
+      ((> pint-e1 pint-e2) (format t "          GUANYA L'EQUIP 1 PER PINTURA!           ~%"))
+      ((> pint-e2 pint-e1) (format t "          GUANYA L'EQUIP 2 PER PINTURA!           ~%"))
+      ;; 3. Guanya un equip aleatòriament.
+      (t (let ((guanyador (nth (random 2) '(e1 e2))))
+           (format t "          GUANYA L'EQUIP ~A PER SORT!             ~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
 
 ;; ======================================================================
 ;; CERCA D'UNITATS
@@ -425,7 +470,7 @@
                               (equip-tirador (cadddr casella-origen))
                               (color-tirador (nth 5 casella-origen))
                               
-                              (nou-tr-pintar (cond ((eq color-terra-orig color-tirador) 1) (t 3)))
+                              (nou-tr-pintar (cond ((eq color-terra-orig color-tirador) 3) (t 9)))
                               
                               (origen-actualitzat (list 'terra color-terra-orig 'bolla equip-tirador
                                                         (nth 4 casella-origen) color-tirador 

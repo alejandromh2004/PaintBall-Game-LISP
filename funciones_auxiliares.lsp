@@ -92,9 +92,3 @@
 ;; ======================================================================
 ;; UTILITATS DE SISTEMA
 ;; ======================================================================
-
-(defun sleep (seconds)
-  "Pausa l'execució la quantitat de segons indicada."
-  (do ((endtime (+ (get-internal-real-time)
-                   (* seconds internal-time-units-per-second))))
-      ((> (get-internal-real-time) endtime))))
