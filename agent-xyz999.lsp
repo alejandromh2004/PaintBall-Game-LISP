@@ -95,6 +95,12 @@
         ((equal (car llista) elem) (+ 1 (agent-xyz999-compta-membres elem (cdr llista))))
         (t (agent-xyz999-compta-membres elem (cdr llista)))))
 
+(defun agent-xyz999-limita-llista (llista n)
+  "Retorna els primers n elements de la llista (per no saturar memòria)."
+  (cond ((null llista) nil)
+        ((<= n 0) nil)
+        (t (cons (car llista) (agent-xyz999-limita-llista (cdr llista) (- n 1))))))
+
 (defun agent-xyz999-esborra-elem (elem llista)
   "Elimina totes les instàncies d'elem a llista (equal)."
   (cond ((null llista) nil)
@@ -241,16 +247,16 @@
   (cond ((not (member color-propi colors-base-enemy)) color-propi)
         (t nil)))
 
-(defun agent-xyz999-tria-color-bolla (colors-base-enemy pintura)
+(defun agent-xyz999-tria-color-bolla (colors-base-enemy pintura ronda)
   "Tria quin color de bolla crear per maximitzar el dany a la base enemiga.
    Si es coneix la base enemiga, crea el color que li falta.
-   Sinó, equilibra entre r, g, b."
+   Sinó, rota r-g-b cada 10 torns per diversificar l'exèrcit."
   (let ((falten (agent-xyz999-colors-falten colors-base-enemy)))
     (cond 
-      ;; Si hi ha colors que falten a la base enemiga, crea'n un
-      ((not (null falten)) (car falten))
-      ;; Si la base enemiga ja té tots els colors (no hauria de passar), crea qualsevol
-      (t 'r))))
+      ;; Si hi ha colors que falten a la base enemiga, crea'n un dels que falten
+      ((and colors-base-enemy (not (null falten))) (car falten))
+      ;; Si la base enemiga és desconeguda, rotem colors per ronda
+      (t (nth (rem (floor (/ ronda 10)) 3) '(r g b))))))
 
 
 ;; ======================================================================
@@ -282,27 +288,28 @@
 ;; SECCIÓ 8: SISTEMA DE NAVEGACIÓ GREEDY
 ;; ======================================================================
 
-(defun agent-xyz999-cost-pas (casella desti color-propi)
+(defun agent-xyz999-cost-pas (casella desti color-propi visited)
   "Cost heurístic d'un pas: distància al destí + penalització si no és del propi color.
-   La penalització reflecteix el x3 cooldown real de moviment en terra d'altre color."
+   També afegeix una penalització alta si la casella ja ha estat visitada."
   (let* ((coord (agent-xyz999-vis-coord casella))
          (color-terra (agent-xyz999-vis-color-terra casella))
          (dist (agent-xyz999-dist-q coord desti))
-         ;; Penalització alta: moure's per terra d'altre color costa x3 cooldown real
-         (pena-color (cond ((eq color-terra color-propi) 0) (t 500))))
-    (+ (* dist 10) pena-color)))
+         ;; Penalització alta si terra d'altre color
+         (pena-color (cond ((eq color-terra color-propi) 0) (t 500)))
+         ;; Penalització de rastre: per no repetir camins (Exploració)
+         (pena-rastre (cond ((agent-xyz999-membre-igual coord visited) 2000) (t 0))))
+    (+ (* dist 10) pena-color pena-rastre)))
 
-(defun agent-xyz999-millor-pas (movibles desti color-propi millor-coord millor-cost)
-  "Cerca greedy la casella movible de menor cost cap al destí.
-   Retorna la COORDENADA de la millor casella, o nil si no n'hi ha."
+(defun agent-xyz999-millor-pas (movibles desti color-propi visited millor-coord millor-cost)
+  "Cerca greedy la casella movible de menor cost cap al destí."
   (cond ((null movibles) millor-coord)
         (t (let* ((casella (car movibles))
-                  (cost (agent-xyz999-cost-pas casella desti color-propi)))
+                  (cost (agent-xyz999-cost-pas casella desti color-propi visited)))
              (cond ((< cost millor-cost)
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi
+                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited
                                              (agent-xyz999-vis-coord casella) cost))
                    (t
-                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi
+                    (agent-xyz999-millor-pas (cdr movibles) desti color-propi visited
                                              millor-coord millor-cost)))))))
 
 
@@ -463,11 +470,11 @@
 ;; SECCIÓ 12: DECISIÓ DE LA BASE
 ;; ======================================================================
 
-(defun agent-xyz999-millor-spawn (movibles desti)
+(defun agent-xyz999-millor-spawn (movibles desti visited)
   "Troba la casella de spawn més propera al destí (la base vol llançar bolles
    en la direcció de l'enemic)."
   (cond ((null movibles) nil)
-        (t (agent-xyz999-millor-pas movibles desti 'cap nil 1000000000))))
+        (t (agent-xyz999-millor-pas movibles desti 'cap visited nil 1000000000))))
 
 (defun agent-xyz999-decisio-base (coord visio mem equip pintura ronda)
   "Decisió de la base: crea una bolla si té prou pintura.
@@ -488,10 +495,10 @@
                                  (t (list (+ (car coord) 500) (+ (cadr coord) 500)))))
               
               ;; Color més útil per destruir la base enemiga
-              (color-nou (agent-xyz999-tria-color-bolla colors-base-enemy pintura))
+              (color-nou (agent-xyz999-tria-color-bolla colors-base-enemy pintura ronda))
               
-              ;; Millor posició de spawn: cap al destí
-              (coord-spawn (agent-xyz999-millor-spawn movibles desti-spawn)))
+              ;; Millor posició de spawn: cap al destí (la base no necessita evitar visited, però el paràmetre és necessari)
+              (coord-spawn (agent-xyz999-millor-spawn movibles desti-spawn (agent-xyz999-get-mem 'visited mem))))
           
           (cond ((and coord-spawn color-nou)
                  (list (list 'crea-bolla (list color-nou coord-spawn))))
@@ -518,12 +525,13 @@
    1. Si en perill: fuig prioritàriament.
    2. Tret: cerca el millor objectiu al rang 5u².
    3. Pinta la pròpia casella si no és del color propi (redueix penalitzacions).
-   4. Moviment: cap al destí segons el rol.
+   4. Moviment: cap al destí segons el rol (evitant zones visitades recents).
   "
   (let* ((temps-pintar (cond (tr-pintar tr-pintar) (t 0)))
          (temps-moure  (cond (tr-moure tr-moure) (t 0)))
          (en-perill    (agent-xyz999-es-en-perill colors-pintat))
          (colors-base-enemy (agent-xyz999-get-mem 'colors-base-enemy mem))
+         (visited      (agent-xyz999-get-mem 'visited mem))
          (rol          (agent-xyz999-rol id-unitat ronda))
          
          ;; --- TRET (si cooldown de pintar < 1) ---
@@ -534,15 +542,10 @@
          (acc-tret (cond (tret-coord (list (list 'pinta (list tret-coord)))) (t nil)))
          
          ;; --- PINTA LA PRÒPIA CASELLA (si no és del propi color i no hem ja disparat) ---
-         ;; Nota: si ja hem disparat, el cooldown puja → no podem tornar a pintar.
-         ;; Però la pròpia casella és la posició actual → pinta coord si color terra ≠ color-propi
-         ;; Això redueix el x3 cooldown de moviment futur.
-         ;; Només ho fem si no hem disparat (no gastem l'acció de pintar dues vegades).
          (casella-actual (agent-xyz999-casella-actual-a-visio visio coord))
          (color-terra-actual (cond (casella-actual 
                                     (agent-xyz999-vis-color-terra casella-actual))
                                    (t color-propi)))
-         ;; Pintar la casella pròpia: útil si no és del nostre color i no hem disparat ja
          (pinta-terra (cond ((and (null tret-coord)
                                   (< temps-pintar 1)
                                   casella-actual
@@ -552,13 +555,12 @@
          (acc-pinta-terra (cond (pinta-terra pinta-terra) (t nil)))
          
          ;; --- MOVIMENT ---
-         ;; Si en perill: fuig, sinó va al destí tàctic
          (desti (cond (en-perill (agent-xyz999-desti-fugida coord mem equip))
                       (t (agent-xyz999-desti-bolla coord mem id-unitat ronda equip visio rol))))
          
          (acc-mou (cond ((< temps-moure 1)
                          (let* ((movibles (agent-xyz999-filtra-movibles visio coord))
-                                (millor (agent-xyz999-millor-pas movibles desti color-propi nil 1000000000)))
+                                (millor (agent-xyz999-millor-pas movibles desti color-propi visited nil 1000000000)))
                            (cond (millor (list (list 'mou (list millor))))
                                  (t nil))))
                         (t nil))))
@@ -591,10 +593,17 @@
          ;; 1. Actualitzem la memòria amb el que veiem
          (mem-1 (agent-xyz999-actualitza-mem-visio visio mem-old equip))
          
-         ;; 2. Si soc la base, registro la meva posició per als defensors
+         ;; 2. Afegim la nostra posició actual al rastre (visited) per no trepitjar-nos
+         ;;    Limitem la llista a 100 elements per no matar el rendiment
+         (visited-old (agent-xyz999-get-mem 'visited mem-1))
+         (mem-2 (agent-xyz999-set-mem 'visited 
+                                      (cons coord (agent-xyz999-limita-llista visited-old 100))
+                                      mem-1))
+
+         ;; 3. Si soc la base, registro la meva posició per als defensors
          (mem-nova (cond ((eq tipus 'base)
-                          (agent-xyz999-set-mem 'base-ally coord mem-1))
-                         (t mem-1)))
+                          (agent-xyz999-set-mem 'base-ally coord mem-2))
+                         (t mem-2)))
          
          ;; 3. Decidim les accions
          (accions (cond
