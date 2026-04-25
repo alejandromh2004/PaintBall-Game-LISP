@@ -183,12 +183,15 @@
               (eq-c  (cond (c (agent-xyz999-c-equip c)) (t nil)))
               (cp    (cond (c (agent-xyz999-c-colors c)) (t nil)))
 
-              ;; Actualitza informació de bases
+              ;; Actualitza informació de bases i enemics
               (mem1  (cond
                        ;; Base enemiga vista: guardem posició i colors pintats
                        ((and (eq elem 'base) coord eq-c (not (eq eq-c equip)))
                         (agent-xyz999-set 'colors-base-enemy cp
                           (agent-xyz999-set 'base-enemy coord mem)))
+                       ;; Bolla enemiga vista: guardem on l'hem vist per inferir on és la seva base
+                       ((and (eq elem 'bolla) coord eq-c (not (eq eq-c equip)))
+                        (agent-xyz999-set 'enemy-last-seen coord mem))
                        ;; Base aliada: guardem posició
                        ((and (eq elem 'base) coord (eq eq-c equip))
                         (agent-xyz999-set 'base-ally coord mem))
@@ -314,7 +317,11 @@
       ((and (= rol 1) (> n-labs 0))
        (agent-xyz999-lab-mes-proper labs coord nil 1000000))
 
-      ;; ROL 1 - CHASSADOR sense labs: s'uneix a l'atac o explora (NO es queda als labs aliats)
+      ;; PRIORITAT COMPARTIDA: Si algú ha vist un enemic, anem a investigar aquesta zona!
+      ((agent-xyz999-get 'enemy-last-seen mem)
+       (agent-xyz999-get 'enemy-last-seen mem))
+
+      ;; ROL 1 - CHASSADOR sense labs ni enemics: s'uneix a l'atac o explora
       ((and (= rol 1) base-enemy) base-enemy)
 
       ;; ROL 2 - EXPLORADOR: si base visible, s'uneix a l'atac
