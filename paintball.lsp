@@ -430,10 +430,10 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (< (cond ((nth 7 casella-origen) (nth 7 casella-origen)) (t 0)) 1)
-                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2)
-                            (eq (car casella-desti) 'terra)
-                            (null (caddr casella-desti)))
+                (cond ((and (< (cond ((nth 7 casella-origen) (nth 7 casella-origen)) (t 0)) 1) ;; Comprova que no s'estigui movent una unitat que està en cooldown
+                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2) ;; Comprova que la distància sigui menor o igual a 2
+                            (eq (car casella-desti) 'terra) ;; Comprova que la casella de destí sigui terra
+                            (null (caddr casella-desti))) ;; Comprova que la casella de destí no sigui una unitat
                        (let* ((color-terra-orig (cadr casella-origen))
                               (color-terra-dest (cadr casella-desti))
                               (equip-bolla (cadddr casella-origen))
@@ -443,18 +443,18 @@
                               (id-unitat (nth 8 casella-origen))
                               
                               (es-diagonal (= (+ (* (- dest-x orig-x) (- dest-x orig-x))
-                                                 (* (- dest-y orig-y) (- dest-y orig-y))) 2))
-                              (tr-base (cond (es-diagonal 1.4142) (t 1)))
-                              (nou-tr-moure (cond ((eq color-terra-dest color-propi) tr-base) (t (* tr-base 3))))
+                                                 (* (- dest-y orig-y) (- dest-y orig-y))) 2)) ;; Calcula si el moviment és diagonal
+                              (tr-base (cond (es-diagonal 1.4142) (t 1))) ;; Assigna el temps de base segons si el moviment és diagonal o no
+                              (nou-tr-moure (cond ((eq color-terra-dest color-propi) tr-base) (t (* tr-base 3)))) ;; Assigna el temps de base segons si el moviment és diagonal o no i el color de la casella de destí
                               
-                              (origen-buit (list 'terra color-terra-orig nil nil nil nil nil nil))
-                              (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-buit))
+                              (origen-buit (list 'terra color-terra-orig nil nil nil nil nil nil)) ;; Assigna la casella de origen com terra
+                              (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-buit)) ;; Crea el nou mapa amb la casella de origen modificada
                               
-                              (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure id-unitat))
-                              (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-ocupat)))
+                              (desti-ocupat (list 'terra color-terra-dest 'bolla equip-bolla colors-pintat color-propi tr-pintar nou-tr-moure id-unitat)) ;; Assigna la casella de desti com a bolla amb les característiques corresponents
+                              (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-ocupat))) ;; Crea el nou mapa amb la casella de destí modificada
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip (list dest-x dest-y) ronda dx dy (cons (list 'mou coord-origen (list dest-x dest-y)) fletxes))))
-                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip (list dest-x dest-y) ronda dx dy (cons (list 'mou coord-origen (list dest-x dest-y)) fletxes)))) ;; Procesa la següent acció
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes))))) ;; Procesa la següent acció si no es pot moure la bolla
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: PINTA
