@@ -1,7 +1,7 @@
 ;; ======================================================================
 ;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
-;; Estudiants: Alejandro Martinez HHermosa, Javier Vivo Samaniego
+;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego
 ;; Data: 30/04/2026
 ;; Assignatura: Llenguatges de Programació (LP)
 ;; Grup: <Indicar Grup>
