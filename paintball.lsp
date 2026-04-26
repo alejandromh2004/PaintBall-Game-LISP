@@ -521,7 +521,7 @@
              ;; ACCIÓ: ESCRIU-MEMORIA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'escriu-memoria)
-              (let ((nova-mem (car args)))
+              (let ((nova-mem (car args))) ;; Guarda la nova memòria
                 (aplica-accions (cdr accions) mapa pintura nova-mem equip coord-origen ronda dx dy fletxes)))
 
              ;; ---------------------------------------------------------
@@ -529,76 +529,69 @@
              ;; ---------------------------------------------------------
              (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))))
 
+;; Demana accions a cada unitat i les aplica seqüencialment
 (defun-tco processa-totes-les-unitats (unitats mapa ronda pintura equip memoria dx dy fletxes)
-  "Demana accions a cada unitat i les aplica seqüencialment. Retorna (nou-mapa nova-pintura nova-memoria)."
   (cond ((null unitats) (list mapa pintura memoria fletxes))
         (t
-         (let* ((coord (car unitats))
-                (x (car coord))
-                (y (cadr coord))
-                ;; 1. Empaquetem el que veu aquesta unitat (amb desplazamiento)
-                (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y dx dy))
+         (let* ((coord (car unitats)) ;; Empaquetem les dades de la unitat actual
+                (x (car coord)) ;; X de la unitat actual
+                (y (cadr coord)) ;; Y de la unitat actual
+                (dades (empaqueta-dades-unitat mapa ronda equip pintura memoria x y dx dy)) ;; Dades de la unitat actual
                 
-                ;; 2. Cridem l'agent intel·ligent (que ara retorna només la llista d'accions)
-                (accions (demana-accions-agent dades))
+                (accions (demana-accions-agent dades)) ;; Accions de la unitat actual
                 
-                ;; 3. Apliquem les accions al mapa (des-desplaçant abans)
-                (resultat-accions (aplica-accions accions mapa pintura memoria equip coord ronda dx dy fletxes))
-                (mapa-post-accions (car resultat-accions))
-                (pintura-post-accions (cadr resultat-accions))
-                (memoria-post-accions (caddr resultat-accions))
-                (fletxes-post-accions (nth 3 resultat-accions)))
+                (resultat-accions (aplica-accions accions mapa pintura memoria equip coord ronda dx dy fletxes)) ;; Accions aplicades
+                (mapa-post-accions (car resultat-accions)) ;; Mapa post accions
+                (pintura-post-accions (cadr resultat-accions)) ;; Pintura post accions
+                (memoria-post-accions (caddr resultat-accions)) ;; Memoria post accions
+                (fletxes-post-accions (nth 3 resultat-accions))) ;; Fletxes post accions
 
-           ;; 4. Crida recursiva per a la següent unitat! 
-           ;; ATENCIÓ: Li passem la MEMORIA-POST-ACCIONS perquè la següent bolla ja sàpiga el que ha vist aquesta!
-           (processa-totes-les-unitats (cdr unitats) 
-                                       mapa-post-accions 
+           (processa-totes-les-unitats (cdr unitats) ;; Següent unitat
+                                       mapa-post-accions ;; Mapa amb accions aplicades
                                        ronda 
-                                       pintura-post-accions 
+                                       pintura-post-accions ;; Pintura amb accions aplicades
                                        equip 
-                                       memoria-post-accions
+                                       memoria-post-accions ;; Memoria amb accions aplicades
                                        dx
                                        dy fletxes-post-accions)))))
 
-
 ;; ======================================================================
-;; ACTUALITZACIÓ DELS TEMPS DE RECUPERACIÓ (COOLDOWNS)
+;; ACTUALITZACIÓ DELS TEMPS DE RECUPERACIÓ
 ;; ======================================================================
 
+;; Decrementa el temps de recuperació d'una unitat
 (defun decrementa-temps (t-recup)
-  "Resta 1 al temps de recuperació, amb un mínim de 0."
   (cond ((null t-recup) nil)     ; Les bases tenen nil
         ((<= t-recup 1) 0)       ; Si és 1, 0.5 o 0, es queda en 0 (a punt per actuar)
         (t (- t-recup 1))))      ; Si és major que 1, li restam 1
 
+;; Redueix els temps de recuperació de les unitats d'un equip
 (defun redueix-temps-casella (casella equip)
-  "Retorna una casella nova amb els temps reduïts si pertany a l'equip."
-  (cond ((eq (car casella) 'aigua) casella)
-        ((eq (car casella) 'terra)
-         (let ((color-terra (cadr casella))
-               (element (caddr casella))
-               (equip-casella (cadddr casella))
-               (colors-pintat (nth 4 casella))
-               (color-propi (nth 5 casella))
-               (tr-pintar (nth 6 casella))
-               (tr-moure (nth 7 casella)))
-           ;; Si hi ha una unitat i és de l'equip actiu, reduïm els seus temps
-           (cond ((and element (eq equip-casella equip))
+  (cond ((eq (car casella) 'aigua) casella) ;; Si es aigua, no es fa res
+        ((eq (car casella) 'terra) ;; Si es terra
+         (let ((color-terra (cadr casella)) ;; Color de la terra
+               (element (caddr casella)) ;; Element a la terra
+               (equip-casella (cadddr casella)) ;; Equip a la terra
+               (colors-pintat (nth 4 casella)) ;; Colors de la terra
+               (color-propi (nth 5 casella)) ;; Color propi de la terra
+               (tr-pintar (nth 6 casella)) ;; Temps de recuperació de pintar
+               (tr-moure (nth 7 casella))) ;; Temps de recuperació de moure
+           (cond ((and element (eq equip-casella equip)) ;; Si hi ha una unitat i és de l'equip actiu, reduïm els seus temps
                   (list 'terra color-terra element equip-casella colors-pintat color-propi 
-                        (decrementa-temps tr-pintar) 
-                        (decrementa-temps tr-moure)
-                        (nth 8 casella)))
-                 (t casella)))) ; Si no és de l'equip o està buida, no la toquem
+                        (decrementa-temps tr-pintar) ;; Redueix el temps de recuperació de pintar
+                        (decrementa-temps tr-moure) ;; Redueix el temps de recuperació de moure
+                        (nth 8 casella))) ;; ID de la unitat
+                 (t casella)))) ;; Si no és de l'equip o està buida, no la toquem
         (t casella)))
 
+;; Recorre la fila actualitzant els temps de les unitats de l'equip
 (defun redueix-temps-fila (fila equip)
-  "Recorre la fila actualitzant els temps de les unitats de l'equip."
   (cond ((null fila) nil)
         (t (cons (redueix-temps-casella (car fila) equip)
                  (redueix-temps-fila (cdr fila) equip)))))
 
+;; Redueix els temps de recuperació de les unitats d'un equip
 (defun redueix-temps-mapa (mapa equip)
-  "Recorre el mapa sencer per actualitzar els temps de recuperació."
   (cond ((null mapa) nil)
         (t (cons (redueix-temps-fila (car mapa) equip)
                  (redueix-temps-mapa (cdr mapa) equip)))))
@@ -607,8 +600,8 @@
 ;; ECONOMIA: COMPTAR LABORATORIOS
 ;; ======================================================================
 
+;; Compta laboratoris d'un equip en una fila
 (defun compta-labs-fila (fila equip)
-  "Compta quants laboratoris té un equip en una fila."
   (cond ((null fila) 0)
         (t (let ((casella (car fila)))
              (cond ((and (eq (car casella) 'terra)
@@ -617,8 +610,8 @@
                     (+ 1 (compta-labs-fila (cdr fila) equip)))
                    (t (compta-labs-fila (cdr fila) equip)))))))
 
+;; Compta laboratoris d'un equip en el mapa
 (defun compta-labs-mapa (mapa equip)
-  "Compta quants laboratoris té un equip en tot el mapa."
   (cond ((null mapa) 0)
         (t (+ (compta-labs-fila (car mapa) equip)
               (compta-labs-mapa (cdr mapa) equip)))))
