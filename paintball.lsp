@@ -430,7 +430,7 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (< (cond ((nth 7 casella-origen) (nth 7 casella-origen)) (t 0)) 1) ;; Comprova que no s'estigui movent una unitat que està en cooldown
+                (cond ((and (< (cond ((nth 7 casella-origen) (nth 7 casella-origen)) (t 0)) 1) ;; Comprova que hagi passat temps de cooldown
                             (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2) ;; Comprova que la distància sigui menor o igual a 2
                             (eq (car casella-desti) 'terra) ;; Comprova que la casella de destí sigui terra
                             (null (caddr casella-desti))) ;; Comprova que la casella de destí no sigui una unitat
@@ -460,6 +460,7 @@
              ;; ACCIÓ: PINTA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'pinta)
+             ;; Treu la informació de l'acció
               (let* ((coord-desti-des (car args)) 
                      (dest-x (- (car coord-desti-des) dx))
                      (dest-y (- (cadr coord-desti-des) dy))
@@ -468,20 +469,20 @@
                      (casella-origen (indexa-matriu mapa orig-y orig-x))
                      (casella-desti (indexa-matriu mapa dest-y dest-x)))
                 
-                (cond ((and (< (cond ((nth 6 casella-origen) (nth 6 casella-origen)) (t 0)) 1)
-                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 5)
-                            (eq (car casella-desti) 'terra))
+                (cond ((and (< (cond ((nth 6 casella-origen) (nth 6 casella-origen)) (t 0)) 1) ;; Comprova que hagi passat temps de cooldown
+                            (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 5) ;; Comprova que la distància sigui menor o igual a 5
+                            (eq (car casella-desti) 'terra)) ;; Comprova que la casella de destí sigui terra
                        (let* ((color-terra-orig (cadr casella-origen))
                               (equip-tirador (cadddr casella-origen))
                               (color-tirador (nth 5 casella-origen))
                               
-                              (nou-tr-pintar (cond ((eq color-terra-orig color-tirador) 3) (t 9)))
+                              (nou-tr-pintar (cond ((eq color-terra-orig color-tirador) 3) (t 9))) ;; Assigna el temps de base segons el color de la casella de destí
                               
                               (origen-actualitzat (list 'terra color-terra-orig 'bolla equip-tirador
                                                         (nth 4 casella-origen) color-tirador 
                                                         nou-tr-pintar (nth 7 casella-origen)
-                                                        (nth 8 casella-origen)))
-                              (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-actualitzat))
+                                                        (nth 8 casella-origen))) ;; Actualitza la casella d'origen amb el nou temps de cooldown de pintada
+                              (mapa-mig (posa-dins-matriu mapa orig-y orig-x origen-actualitzat)) ;; Crea el mapa amb la casella d'origen actualitzada
                               
                               (element-desti (caddr casella-desti))
                               (equip-desti (cadddr casella-desti))
@@ -494,7 +495,7 @@
                                (cond ((and element-desti (not (eq element-desti 'lab)))
                                       (cond ((member color-tirador colors-desti) colors-desti)
                                             (t (cons color-tirador colors-desti))))
-                                     (t colors-desti)))
+                                     (t colors-desti))) ;; Actualitza els colors de la casella de destí
                               
                               (colors-totals (cons color-propi-desti nous-colors-desti))
                               
