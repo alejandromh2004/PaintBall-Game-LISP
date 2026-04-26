@@ -22,7 +22,7 @@
 ;;        cobrir mapes de 20×20 fins a 60×60.
 ;;     ✅ Cada bolla manté una FASE en memòria compartida (unit-phases).
 ;;        Quan arriba al waypoint (dist²<16), avança automàticament.
-;;     ✅ TIMEOUT anti-bloqueig: si (ronda mod 20 = id mod 20), avança
+;;     ✅ TIMEOUT anti-bloqueig: si (ronda mod 6 = id mod 6), avança
 ;;        la fase per força, evitant que es quedi eterns en water/mur.
 ;;     ✅ Dispersió per id: índex = (abs(id)+fase) mod 24 → cada bolla
 ;;        comença en un waypoint distint, cobertura paral·lela garantida.
@@ -317,9 +317,9 @@
    Condicions d'avanç (qualsevol de les dues):
      (1) Proximitat: dist² al waypoint actual < 16 (~4 caselles).
          La bolla ha assolit el punt d'exploració assignat.
-     (2) Timeout anti-bloqueig: (ronda mod 20) = (id mod 20).
-         Força l'avanç cada ~20 torns per superar water/murs/obstacles.
-         Cada unitat té el seu propi timeout (id mod 20 distints).
+     (2) Timeout anti-bloqueig: (ronda mod 6) = (id mod 6).
+         Força l'avanç cada ~6 torns per superar water/murs/obstacles.
+         Cada unitat té el seu propi timeout (id mod 6 distints).
 
    coord: (x y) posició actual. mem: a-list. id, ronda: enters."
   (let* ((base-ally   (agent-xyz999-get 'base-ally mem))
@@ -327,8 +327,8 @@
          (fase        (agent-xyz999-get-unit-phase id unit-phases))
          (wp          (agent-xyz999-waypoint-per-fase id fase base-ally))
          (dist-wp     (agent-xyz999-dist-q coord wp))
-         (timeout     (= (rem (agent-xyz999-abs ronda) 20)
-                         (rem (agent-xyz999-abs id)    20))))
+         (timeout     (= (rem (agent-xyz999-abs ronda) 6)
+                         (rem (agent-xyz999-abs id)    6))))
     (cond
       ((or (< dist-wp 16) timeout)
        (let* ((nova-fase       (+ fase 1))
@@ -422,6 +422,11 @@
                 (agent-xyz999-millor-mov (cdr movibles) desti color-propi
                                          best-coord best-cost)))))))
 
+(defun agent-xyz999-fallback-mov (movibles)
+  "Retorna la primera casella disponible com a fallback si està encallada."
+  (cond ((null movibles) nil)
+        (t (agent-xyz999-c-coord (car movibles)))))
+
 
 ;; ======================================================================
 ;; SECCIÓ 8: SISTEMA DE COMBAT
@@ -514,11 +519,12 @@
          ;; MOVIMENT: cap al destí de rol/waypoint si cooldown < 1
          (desti      (agent-xyz999-desti-bolla mem id coord color-propi))
          (acc-mou    (cond ((< tm 1)
-                            (let* ((movs (agent-xyz999-movibles vis coord))
-                                   (m    (agent-xyz999-millor-mov movs desti
-                                                                  color-propi
-                                                                  nil 1000000000)))
-                              (cond (m (list (list 'mou (list m))))
+                            (let* ((movs  (agent-xyz999-movibles vis coord))
+                                   (m     (agent-xyz999-millor-mov movs desti
+                                                                   color-propi
+                                                                   nil 1000000000))
+                                   (m-fin (cond (m m) (t (agent-xyz999-fallback-mov movs)))))
+                              (cond (m-fin (list (list 'mou (list m-fin))))
                                     (t nil))))
                            (t nil))))
     (append acc-tret acc-mou)))
