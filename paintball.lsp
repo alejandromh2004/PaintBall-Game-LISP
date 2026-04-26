@@ -1,102 +1,65 @@
 ;; ======================================================================
 ;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
-;; Estudiants: ABC, XYZ
-;; Data: 25/04/2026
+;; Estudiants: Alejandro Martinez HHermosa, Javier Vivo Samaniego
+;; Data: 30/04/2026
 ;; Assignatura: Llenguatges de Programació (LP)
 ;; Grup: <Indicar Grup>
 ;; Professors: <Indicar Professors>
 ;; Convocatòria: Primera Convocatòria (Ordinària)
-;;
-;; ----------------------------------------------------------------------
-;; FITXER: paintball.lsp
-;; DESCRIPCIÓ: Controlador principal del joc. Gestiona el bucle de 
-;; partida, l'alternança de torns, l'execució d'accions dels agents,
-;; la validació de regles i les condicions de victòria.
-;;
-;; INSTRUCCIONS D'ÚS:
-;; 1. Carregar el fitxer: (load "paintball.lsp")
-;; 2. Iniciar la partida: (inici)
-;; 
-;; DISSENY FUNCIONAL:
-;; S'ha seguit un enfocament purament funcional. L'estat del joc es
-;; passa com a paràmetre en les crides recursives. S'ha fet ús de
-;; l'optimització de crides en posició final (TCO) per permetre 
-;; partides de llarga durada sense desbordament de pila.
-;;
-;; ASPECTES OPCIONALS IMPLEMENTATS:
-;; - Sistema d'identificadors únics (id-unitat) per a cada unitat.
-;; - Validació estricta de rangs i cooldowns en el controlador.
-;; - Coordenades desplazades aleatòriament (anti-deducció de mapa).
-;; - Memòria compartida funcional entre unitats del mateix equip.
-;; - Límit de 1500 torns amb sistema de finalització.
-;;
-;; CANVIS RESPECTE A LA VERSIÓ ANTERIOR:
-;; - Eliminat (BLACK) entre dibuixa-mapa i el prompt: evitava que el HUD
-;;   fos visible de manera consistent (reconfigurava el pen color de XLISP
-;;   just després del dibuix, causant artefactes de refresc visuals).
-;; - El prompt de torn ara mostra el número de ronda: "Ronda X/1500".
-;; - En prémer 'q', s'executa (cls) per deixar la pantalla en blanc net.
-;; ----------------------------------------------------------------------
 
-;; Necessari per a l'optimització de crides recursives.
-(cond ((not (boundp '*features*)) (setq *features* nil)))
-(load "proyectos/projecte_inicial/common.lsp") ; https://almy.us/files/xl305req.zip
-(load "proyectos/projecte_inicial/tco.lsp")    ; https://github.com/antoni-oliver/defun-tco
-
-;; Altres fitxers de la pràctica:
+;; Inicialitza el programa, carregant tots els fitxers necessaris
+(cond ((not (boundp '*features*)) (setq *features* nil))) 
+(load "proyectos/projecte_inicial/common.lsp") 
+(load "proyectos/projecte_inicial/tco.lsp")    
 (load "proyectos/projecte_inicial/funciones_auxiliares.lsp")
 (load "proyectos/projecte_inicial/grafics.lsp")
 (load "proyectos/projecte_inicial/agent-abc123.lsp")
 (load "proyectos/projecte_inicial/agent-xyz999.lsp")
 
-
+;; Punt d'entrada del programa
 (defun inici (&optional (fitxer "proyectos/projecte_inicial/maps/bait.map"))
-  "Punt d'entrada del programa. Pots passar-li el camí d'un fitxer de mapa."
   (BLACK) 
   (mode 0 0 640 400) 
   
+  ;; Prepara el mapa i inicia la partida
   (let ((mapa-inicial (carrega-mapa fitxer)))
     (inicia-partida mapa-inicial))
   
   (BLACK) 
   t)
 
+;; Carga mapa
 (defun carrega-mapa (nom-fitxer)
-  "Llegeix el mapa des d'un fitxer de text i retorna la llista."
   (let* ((canal (open nom-fitxer :direction :input))
-         (mapa (read canal)))  ; Llegeix la llista directament
-    (close canal)              ; És molt important tancar el fitxer!
+         (mapa (read canal)))
+    (close canal)
     mapa)
 )
 
-
-;; ======================================================================
-;; GESTIÓ D'IDENTIFICADORS ÚNICS (Bug 3)
-;; ======================================================================
-
+;; Prepara el mapa inicial
 (defun prepara-casella-inicial (casella x y)
-  "Inicialitza unitats (ID únic i colors de dany segons l'enunciat)."
+;; Si es terra base o bolla inicialitzam colors inicials i ID
   (cond ((and (eq (car casella) 'terra) 
               (or (eq (caddr casella) 'base) (eq (caddr casella) 'bolla)))
-         (let* ((tipus (caddr casella))
-                (color-propi (nth 5 casella))
-                ;; Bases comencen sense estar pintades de cap color (nil)
-                ;; Bolles comencen pintades NOMÉS del seu color (list color-propi)
-                (colors-inicials (cond ((eq tipus 'base) nil)
-                                       (t (list color-propi))))
-                ;; L'ID ha de ser un enter únic: usem (y * 1000) + x
-                (id-unitat (+ (* y 1000) x)))
+         (let* ((tipus (caddr casella)) ;; Tipus casella(base o bolla)
+                (color-propi (nth 5 casella)) ;; Color propi de la unitat
+                (colors-inicials (cond ((eq tipus 'base) nil) ;; Bases sin pintar
+                                       (t (list color-propi)))) ;; Bolles pintades del seu color
+                (id-unitat (+ (* y 1000) x))) ;; ID de la unitat\
+          ;; Declara la nova casella amb tots els camps
            (list 'terra (cadr casella) tipus (cadddr casella) 
                  colors-inicials color-propi (nth 6 casella) (nth 7 casella) 
                  id-unitat)))
         (t casella)))
 
+;; Prepara una fila sencera de caselles
 (defun prepara-fila-inicial (fila x y)
   (cond ((null fila) nil)
         (t (cons (prepara-casella-inicial (car fila) x y)
                  (prepara-fila-inicial (cdr fila) (+ x 1) y)))))
 
+;; Prepara el mapa inicial
 (defun prepara-mapa-inicial (mapa y)
   (cond ((null mapa) nil)
         (t (cons (prepara-fila-inicial (car mapa) 0 y)
@@ -107,30 +70,22 @@
 ;; CONTROLADOR GENERAL
 ;; ======================================================================
 
+;; Inicialitza el joc
 (defun inicia-partida (mapa-inicial)
-  "Prepara l'estat inicial i llança el bucle principal de la partida."
-  ;; Generem el desplazamiento aleatori fix per a tota la partida (Bug 6)
-  (let ((dx (random 1000))
-        (dy (random 1000))
+  (let ((dx (random 1000)) ;; Desplaçament horitzontal aleatori per a les unitats
+        (dy (random 1000)) ;; Desplaçament vertical aleatori per a les unitats
         (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
-    (format t "~%[SISTEMA] Coordenades desplazades per dx=~A, dy=~A~%" dx dy)
-    ;; Paràmetres: ronda mapa p1 p2 m1 m2 dx dy historia skip-visual fletxes-prev
-    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil)))
+    ;; Inicialitza el bucle de la partida
+    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil))) ;; Valors inicials del bucle
 
 
 (defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual fletxes-prev)
-  "El motor principal del joc. S'executa recursivament a cada torn."
-  
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
        (dibuixa-mapa mapa ronda
                      (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
                      pint-e1 pint-e2 fletxes-prev)))
-  
-  ;; FIX: S'ha eliminat (BLACK) aquí. Cridant (BLACK) just després de dibuixa-mapa
-  ;; es reconfigurava el color del pen de XLISP-PLUS i podia causar que el HUD
-  ;; no aparegués de manera consistent en alguns cicles de refresc de la finestra.
-  
+
   (cond 
     ;; 1. VICTÒRIA EQUIP 2 (La base de l'E1 ha desaparegut)
     ((= (compta-bases-mapa mapa 'e1) 0)
@@ -154,8 +109,7 @@
      'fi-de-partida)
         
     (t 
-     ;; FIX: El prompt ara mostra el número de ronda clarament.
-     ;; Això és especialment útil perquè el HUD pot trigar a refrecar-se.
+
       (format t "~%Ronda ~A/1500" ronda)
       (format t "~%E1: ~A" pint-e1)
       (format t "~%E2: ~A" pint-e2)
@@ -163,8 +117,6 @@
       (format t "~%Controls")
       (format t "~%Continuar: ENTER")
       (format t "~%Enrere: b")
-      (format t "~%Automatic: a")
-      (format t "~%Pausa: s")
       (format t "~%Sortir: q")
       (format t "~%-----------------")
       (format t "~%Tecla:")
@@ -175,8 +127,6 @@
        
        (cond 
          ;; 0. BOTÓ SORTIR (q)
-         ;; FIX: S'afegeix (cls) per netejar la pantalla completament en blanc
-         ;; quan l'usuari surt. Sense (cls), el mapa quedava visible.
          ((eq cmd 'q)
           (cls)
           (format t "~%[SISTEMA] Partida aturada per l'usuari.~%")
@@ -245,7 +195,7 @@
               (compta-bases-mapa (cdr mapa) equip)))))
 
 ;; ======================================================================
-;; LÒGICA DE DESEMPAT (Obligatori)
+;; LÒGICA DE DESEMPAT
 ;; ======================================================================
 
 (defun compta-bolles-fila (fila equip)
@@ -292,10 +242,10 @@
 
 (defun es-unitat-equip (casella equip)
   "Comprova si una casella conté una 'base' o 'bolla' de l'equip indicat."
-  ;; A LISP, fer (caddr '(terra g)) retorna NIL sense donar error, el que és perfecte.
+
   (and (eq (car casella) 'terra)            ;; Ha de ser terra
        (or (eq (caddr casella) 'base)       ;; Ha de ser una base
-           (eq (caddr casella) 'bolla))     ;; ... o una bolla
+           (eq (caddr casella) 'bolla))     ;; o una bolla
        (eq (cadddr casella) equip)))        ;; I ha de pertànyer a l'equip
 
 (defun busca-unitats-fila (fila equip x y)
