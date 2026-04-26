@@ -310,17 +310,38 @@
     (cond ((null rel) (list bx by))
           (t (list (+ bx (car rel)) (+ by (cadr rel)))))))
 
-(defun agent-xyz999-avanca-fase-si-cal (coord mem id ronda)
+(defun agent-xyz999-hi-ha-caselles-dir (vis eix op valor)
+  "Comprova si hi ha alguna casella a vis que compleixi (op (coord eix) valor)."
+  (cond ((null vis) nil)
+        (t (let* ((c (agent-xyz999-c-coord (car vis)))
+                  (v (cond ((eq eix 'x) (car c)) (t (cadr c)))))
+             (cond ((cond ((eq op '>) (> v valor))
+                          (t          (< v valor)))
+                    t)
+                   (t (agent-xyz999-hi-ha-caselles-dir (cdr vis) eix op valor)))))))
+
+(defun agent-xyz999-fora-limits-p (wp coord vis)
+  "Retorna cert si el waypoint wp està fora dels límits del mapa.
+   Si el destí està més enllà de la nostra posició actual en un eix,
+   però la visió no mostra CAP casella en aquesta direcció, significa
+   que hem arribat al límit del mapa i el wp és inabastable."
+  (let ((tx (car wp))
+        (ty (cadr wp))
+        (cx (car coord))
+        (cy (cadr coord)))
+    (or (and (> tx cx) (not (agent-xyz999-hi-ha-caselles-dir vis 'x '> cx)))
+        (and (< tx cx) (not (agent-xyz999-hi-ha-caselles-dir vis 'x '< cx)))
+        (and (> ty cy) (not (agent-xyz999-hi-ha-caselles-dir vis 'y '> cy)))
+        (and (< ty cy) (not (agent-xyz999-hi-ha-caselles-dir vis 'y '< cy))))))
+
+(defun agent-xyz999-avanca-fase-si-cal (coord mem id ronda vis)
   "Comprova si la bolla id ha de canviar de waypoint i, si cal,
    retorna la memòria actualitzada amb la fase incrementada.
 
-   Condicions d'avanç (qualsevol de les dues):
+   Condicions d'avanç:
      (1) Proximitat: dist² al waypoint actual < 16 (~4 caselles).
-         La bolla ha assolit el punt d'exploració assignat.
      (2) Timeout anti-bloqueig: (ronda mod 35) = (id mod 35).
-         Força l'avanç cada ~35 torns per donar temps a viatjar lluny
-         sense quedar-se encallats indefinidament.
-         Cada unitat té el seu propi timeout (id mod 6 distints).
+     (3) Fora del mapa: La visió confirma que el waypoint està fora.
 
    coord: (x y) posició actual. mem: a-list. id, ronda: enters."
   (let* ((base-ally   (agent-xyz999-get 'base-ally mem))
@@ -329,9 +350,10 @@
          (wp          (agent-xyz999-waypoint-per-fase id fase base-ally))
          (dist-wp     (agent-xyz999-dist-q coord wp))
          (timeout     (= (rem (agent-xyz999-abs ronda) 35)
-                         (rem (agent-xyz999-abs id)    35))))
+                         (rem (agent-xyz999-abs id)    35)))
+         (fora-mapa   (agent-xyz999-fora-limits-p wp coord vis)))
     (cond
-      ((or (< dist-wp 16) timeout)
+      ((or (< dist-wp 16) timeout fora-mapa)
        (let* ((nova-fase       (+ fase 1))
               (nou-unit-phases (agent-xyz999-set-unit-phase id nova-fase unit-phases)))
          (agent-xyz999-set 'unit-phases nou-unit-phases mem)))
@@ -613,7 +635,7 @@
          ;; Pas 3: les bolles avancen fase si han assolit el waypoint o timeout
          (mem-final   (cond
                         ((eq tipus 'bolla)
-                         (agent-xyz999-avanca-fase-si-cal coord mem-base id ronda))
+                         (agent-xyz999-avanca-fase-si-cal coord mem-base id ronda vis))
                         (t mem-base)))
 
          ;; Pas 4: decideix accions amb la memòria completament actualitzada
