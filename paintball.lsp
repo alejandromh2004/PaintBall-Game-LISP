@@ -492,29 +492,29 @@
                               (tr-m-desti (nth 7 casella-desti))
                               
                               (nous-colors-desti 
-                               (cond ((and element-desti (not (eq element-desti 'lab)))
-                                      (cond ((member color-tirador colors-desti) colors-desti)
-                                            (t (cons color-tirador colors-desti))))
+                               (cond ((and element-desti (not (eq element-desti 'lab))) ;; Comprova que la casella de destí no sigui un laboratori
+                                      (cond ((member color-tirador colors-desti) colors-desti) ;; Comprova si el color del tirador ja esta en la llista de colors
+                                            (t (cons color-tirador colors-desti)))) ;; Si el color del tirador no esta en la llista de colors, s'afegeix
                                      (t colors-desti))) ;; Actualitza els colors de la casella de destí
                               
-                              (colors-totals (cons color-propi-desti nous-colors-desti))
+                              (colors-totals (cons color-propi-desti nous-colors-desti)) ;; Crea la llista de colors totals
                               
                               (explota (and (member 'r colors-totals)
                                             (member 'g colors-totals)
-                                            (member 'b colors-totals)))
+                                            (member 'b colors-totals))) ;; Comprova si la casella de destí ha explotat
                               
                               (desti-actualitzat 
                                (cond 
                                   (explota 
-                                   (list 'terra color-tirador nil nil nil nil nil nil))
+                                   (list 'terra color-tirador nil nil nil nil nil nil)) ;; Si la casella de destí ha explotat, s'afegeix com a terra amb el color del tirador
                                   ((eq element-desti 'lab)
-                                   (list 'terra color-tirador 'lab equip-tirador nil nil nil nil))
+                                   (list 'terra color-tirador 'lab equip-tirador nil nil nil nil)) ;; Si la casella de destí es un laboratori, s'afegeix com a laboratori amb el color del tirador
                                   (t
-                                   (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti (nth 8 casella-desti)))))
+                                   (list 'terra color-tirador element-desti equip-desti nous-colors-desti color-propi-desti tr-p-desti tr-m-desti (nth 8 casella-desti))))) ;; Si la casella de destí no es un laboratori, s'afegeix com a terra amb el color del tirador i els colors actualitzats
                               
-                              (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat)))
+                              (nou-mapa (posa-dins-matriu mapa-mig dest-y dest-x desti-actualitzat))) ;; Crea el mapa amb la casella de destí actualitzada
                          
-                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip coord-origen ronda dx dy (cons (list 'pinta coord-origen (list dest-x dest-y)) fletxes))))
+                         (aplica-accions (cdr accions) nou-mapa pintura memoria equip coord-origen ronda dx dy (cons (list 'pinta coord-origen (list dest-x dest-y)) fletxes)))) ;; Procesa la següent acció
                       (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
              
              ;; ---------------------------------------------------------
