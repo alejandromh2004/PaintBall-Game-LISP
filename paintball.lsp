@@ -344,34 +344,29 @@
 
 ;; Construeix la llista d'estat que necessita l'agent
 (defun empaqueta-dades-unitat (mapa ronda equip pintura memoria x y dx dy)
-  ;; Recorda que a la teva funció indexa-matriu, el segon paràmetre és la fila (y) i el tercer la columna (x)
   (let* ((casella (indexa-matriu mapa y x))
-         (tipus-unitat (caddr casella))  ; Extraiem si és 'base o 'bolla
-         
-         ;; Extraiem la resta de dades (si la casella encara no té aquesta info extensa, seran nil)
+         (tipus-unitat (caddr casella))  ; Extraiem si és base o bolla
          (colors-pintat (nth 4 casella)) ; Llista de colors dels quals està pintada
-         (color-propi (nth 5 casella))   ; Color de la bolla ('r, 'g, 'b) o nil
+         (color-propi (nth 5 casella))   ; Color de la bolla (r, g, b) o nil
          (tr-pintar (nth 6 casella))     ; Temps de recuperació per pintar
          (tr-moure (nth 7 casella))      ; Temps de recuperació per moure
          
-         ;; Assignem el rang de visió correcte segons el tipus d'unitat
+         ;; Assignem el rang de visió segons el tipus d'unitat
          (rang-visio (cond ((eq tipus-unitat 'base) 64)
                            ((eq tipus-unitat 'bolla) 20)
                            (t 0)))
                             
-         ;; Calculem què veu aquesta unitat des de la seva posició (aplicant dx/dy a la visió)
+         ;; Calculem què veu aquesta unitat des de la seva posició
          (visio (visio-mapa mapa x y rang-visio 0 dx dy))
-         
-         ;; Extraiem l'ID únic emmagatzemat a la casella (Bug 3)
          (id-unitat (nth 8 casella)))
     
-    ;; Retornem la llista estructurada exactament com demana l'enunciat
+    ;; Retornem la llista
     (list ronda 
           equip 
           pintura 
           id-unitat
           tipus-unitat 
-          (list (+ x dx) (+ y dy)) ; coordenada desplazada
+          (list (+ x dx) (+ y dy)) ; Coordenada desplaçada
           colors-pintat 
           color-propi 
           tr-pintar 
@@ -379,9 +374,9 @@
           visio 
           memoria)))
 
+;; Funció que crida a l'agent corresponent segons l'equip
 (defun demana-accions-agent (dades-empaquetades)
-  "Crida a l'agent i retorna la llista d'accions."
-  (let ((equip (nth 1 dades-empaquetades)))
+  (let ((equip (nth 1 dades-empaquetades))) ;; Comprova a quí s'ha de cridar
     (cond 
       ((eq equip 'e1) (agent-xyz999 dades-empaquetades))
       ((eq equip 'e2) (agent-abc123 dades-empaquetades))
@@ -391,8 +386,8 @@
 ;; PROCESSADOR D'ACCIONS
 ;; ======================================================================
 
+;; Processe una llista d'accions
 (defun-tco aplica-accions (accions mapa pintura memoria equip coord-origen ronda dx dy fletxes)
-  "Aplica recursivament una llista d'accions retornant el nou (mapa pintura memoria fletxes)."
   (cond ((null accions) (list mapa pintura memoria fletxes))
         (t
          (let* ((accio (car accions))
@@ -404,6 +399,7 @@
              ;; ACCIÓ: CREA-BOLLA
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'crea-bolla)
+             ;; Treu la informació de l'acció
               (let* ((color-bolla (car args))
                      (coord-desti (cadr args))
                      (dest-x (- (car coord-desti) dx))
@@ -411,20 +407,21 @@
                      (orig-x (car coord-origen))
                      (orig-y (cadr coord-origen)))
                 (cond ((and (<= (distancia-quadrada orig-x orig-y dest-x dest-y) 2)
-                            (>= pintura 50))
-                       (let* ((casella-vella (indexa-matriu mapa dest-y dest-x))
-                              (color-terra (cadr casella-vella))
-                              (id-unitat (+ (* ronda 100000) (+ (* dest-y 1000) dest-x)))
-                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 id-unitat))
-                              (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella))
-                              (nova-pintura (- pintura 50)))
-                         (aplica-accions (cdr accions) nou-mapa nova-pintura memoria equip coord-origen ronda dx dy fletxes)))
-                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes)))))
+                            (>= pintura 50)) ;; Comprovam que sigui vàlida (diagonals, eixos i disponibilitat de pintura)
+                       (let* ((casella-vella (indexa-matriu mapa dest-y dest-x)) ;; Treu la casella a on es vol crear la bolla
+                              (color-terra (cadr casella-vella)) ;; Treu el color de la casella on es vol crear la bolla
+                              (id-unitat (+ (* ronda 100000) (+ (* dest-y 1000) dest-x))) ;; Assigna un identificador únic
+                              (nova-casella (list 'terra color-terra 'bolla equip nil color-bolla 0 0 id-unitat)) ;; Crea la nova casella
+                              (nou-mapa (posa-dins-matriu mapa dest-y dest-x nova-casella)) ;; Crea el nou mapa
+                              (nova-pintura (- pintura 50))) ;; Li treu 50 punts de pintura
+                         (aplica-accions (cdr accions) nou-mapa nova-pintura memoria equip coord-origen ronda dx dy fletxes))) ;; Procesa la següent acció
+                      (t (aplica-accions (cdr accions) mapa pintura memoria equip coord-origen ronda dx dy fletxes))))) ;; Procesa la següent acció si no es pot crear la bolla
              
              ;; ---------------------------------------------------------
              ;; ACCIÓ: MOU
              ;; ---------------------------------------------------------
              ((eq tipus-accio 'mou)
+             ;; Treu la informació de l'acció
               (let* ((coord-desti-des (car args))
                      (dest-x (- (car coord-desti-des) dx))
                      (dest-y (- (cadr coord-desti-des) dy))
