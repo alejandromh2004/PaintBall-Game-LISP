@@ -287,13 +287,13 @@
 
 (defun agent-xyz999-waypoints ()
   "Llista de 24 desplaçaments relatius (dx dy) en espiral de 3 anells.
-   Anell 1 (radi~10): cobreix mapes petits (20×20) des del primer torn.
-   Anell 2 (radi~20): cobreix mapes mitjans (40×40).
-   Anell 3 (radi~28): cobreix els extrems de mapes grans (60×60).
-   Les 8 directions per anell garanteixen cobertura isotròpica."
-  '((10 0)  (7 7)   (0 10)  (-7 7)   (-10 0)  (-7 -7)  (0 -10)  (7 -7)
-    (20 0)  (14 14) (0 20)  (-14 14) (-20 0)  (-14 -14)(0 -20)  (14 -14)
-    (28 10) (10 28) (-10 28)(-28 10) (-28 -10)(-10 -28)(10 -28) (28 -10)))
+   Anell 1 (radi~25): cobreix espais oberts immediats.
+   Anell 2 (radi~45): cobreix mapes mitjans i zones intermèdies.
+   Anell 3 (radi~65): cobreix els extrems de mapes molt grans.
+   Radi estès dràsticament per forçar l'allunyament de la base."
+  '((25 0)  (18 18) (0 25)  (-18 18) (-25 0)  (-18 -18) (0 -25) (18 -18)
+    (45 0)  (32 32) (0 45)  (-32 32) (-45 0)  (-32 -32) (0 -45) (32 -32)
+    (65 15) (15 65) (-15 65)(-65 15) (-65 -15)(-15 -65) (15 -65)(65 -15)))
 
 (defun agent-xyz999-waypoint-per-fase (id fase base-ally)
   "Retorna la coord absoluta del waypoint per la fase actual de la unitat id.
@@ -317,8 +317,9 @@
    Condicions d'avanç (qualsevol de les dues):
      (1) Proximitat: dist² al waypoint actual < 16 (~4 caselles).
          La bolla ha assolit el punt d'exploració assignat.
-     (2) Timeout anti-bloqueig: (ronda mod 6) = (id mod 6).
-         Força l'avanç cada ~6 torns per superar water/murs/obstacles.
+     (2) Timeout anti-bloqueig: (ronda mod 35) = (id mod 35).
+         Força l'avanç cada ~35 torns per donar temps a viatjar lluny
+         sense quedar-se encallats indefinidament.
          Cada unitat té el seu propi timeout (id mod 6 distints).
 
    coord: (x y) posició actual. mem: a-list. id, ronda: enters."
@@ -327,8 +328,8 @@
          (fase        (agent-xyz999-get-unit-phase id unit-phases))
          (wp          (agent-xyz999-waypoint-per-fase id fase base-ally))
          (dist-wp     (agent-xyz999-dist-q coord wp))
-         (timeout     (= (rem (agent-xyz999-abs ronda) 6)
-                         (rem (agent-xyz999-abs id)    6))))
+         (timeout     (= (rem (agent-xyz999-abs ronda) 35)
+                         (rem (agent-xyz999-abs id)    35))))
     (cond
       ((or (< dist-wp 16) timeout)
        (let* ((nova-fase       (+ fase 1))
@@ -398,15 +399,16 @@
 
 (defun agent-xyz999-cost-mov (casella desti color-propi)
   "Cost d'un moviment a casella dirigint-se cap a desti.
-   Cost = dist²(casella, desti)*10 + penalització de color.
-   Penalitza +5 les caselles de color aliè per preferir camins del color propi
-   i minimitzar el triple cooldown del joc.
+   Cost = dist²(casella, desti)*10 + penalització de color + soroll.
+   Penalitza +5 les caselles de color aliè. S'hi suma (random 20) per 
+   trencar oscil·lacions infinites quan hi ha parets d'aigua en forma de U.
    casella: estructura casella. desti: (x y). color-propi: símbol."
   (let ((coord (agent-xyz999-c-coord casella)))
     (cond ((or (null coord) (null desti)) 1000000)
           (t (+ (* (agent-xyz999-dist-q coord desti) 10)
                 (cond ((eq (agent-xyz999-c-color casella) color-propi) 0)
-                      (t 5)))))))
+                      (t 5))
+                (random 20))))))
 
 (defun agent-xyz999-millor-mov (movibles desti color-propi best-coord best-cost)
   "Cerca greedy la casella de movibles amb menor cost cap a desti.
