@@ -78,7 +78,7 @@
     ;; Inicialitza el bucle de la partida
     (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil))) ;; Valors inicials del bucle
 
-
+;; Bucle principal del joc amb fletxes, gestió de l'historial de rondes i gestió de la memòria.
 (defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual fletxes-prev)
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
@@ -87,7 +87,7 @@
                      pint-e1 pint-e2 fletxes-prev)))
 
   (cond 
-    ;; 1. VICTÒRIA EQUIP 2 (La base de l'E1 ha desaparegut)
+    ;; Comprova si l'equip 1 ha perdut (la base ha desaparegut)
     ((= (compta-bases-mapa mapa 'e1) 0)
      (format t "~%==================================================~%")
      (format t "    VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT    ~%")
@@ -95,7 +95,7 @@
      (format t "==================================================~%")
      'fi-de-partida)
 
-    ;; 2. VICTÒRIA EQUIP 1 (La base de l'E2 ha desaparegut)
+    ;; Comprova si l'equip 2 ha perdut (la base ha desaparegut)
     ((= (compta-bases-mapa mapa 'e2) 0)
      (format t "~%==================================================~%")
      (format t "    VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT    ~%")
@@ -103,36 +103,49 @@
      (format t "==================================================~%")
      'fi-de-partida)
 
-    ;; 3. EMPAT PER LÍMIT DE TORNS
+    ;; Comprova si s'ha arribat al límit de rondes
     ((> ronda 1500)
      (determina-guanyador-empat mapa pint-e1 pint-e2)
      'fi-de-partida)
         
     (t 
-
-      (format t "~%Ronda ~A/1500" ronda)
-      (format t "~%E1: ~A" pint-e1)
-      (format t "~%E2: ~A" pint-e2)
-      (format t "~%---------------")
-      (format t "~%Controls")
-      (format t "~%Continuar: ENTER")
-      (format t "~%Enrere: b")
-      (format t "~%Sortir: q")
-      (format t "~%-----------------")
-      (format t "~%Tecla:")
-      (let* ((input (read-line))
-            (cmd (cond ((string-equal input "b") 'b)
-                       ((string-equal input "q") 'q)
-                       (t 'f))))
+      ;; Determinem si hem de mostrar el menú o processar automàticament
+      (let* ((cmd (cond 
+                    ((> skip-visual 0) 'f) ;; Si estem saltant, el comando és forward
+                    ;; Aquí mostram la consola
+                    (t (progn
+                        (format t "~%Ronda ~A/1500" ronda)
+                        (format t "~%E1: ~A" pint-e1)
+                        (format t "~%E2: ~A" pint-e2)
+                        (format t "~%---------------")
+                        (format t "~%Controls")
+                        (format t "~%Continuar: ENTER")
+                        (format t "~%Saltar: s")
+                        (format t "~%Enrere: b")
+                        (format t "~%Sortir: q")
+                        (format t "~%-----------------")
+                        (format t "~%Tecla: ")
+                        ;; Aquí llegim la tecla
+                        (let ((input (read-line)))
+                          (cond ((string-equal input "b") 'b)
+                                ((string-equal input "q") 'q)
+                                ((string-equal input "s") 's)
+                                (t 'f)))))))
+             ;; Calculem el skip per a la següent iteració
+             (proxim-skip (cond ((eq cmd 's) 
+                                 (format t "Quantes rondes vols saltar? ")
+                                 (let ((n (read))) (max 0 (- n 1)))) ;; Escogit saltar: n-1 rondes (no se processa la ronda actual)
+                                ((> skip-visual 0) (- skip-visual 1)) ;; Continuam saltant
+                                (t 0)))) ;; No hem saltat cap ronda
        
        (cond 
-         ;; 0. BOTÓ SORTIR (q)
+         ;; Si es q, sortim del joc
          ((eq cmd 'q)
           (cls)
           (format t "~%[SISTEMA] Partida aturada per l'usuari.~%")
           'fi-de-partida)
 
-         ;; 1. BOTÓ ENRERE (b)
+         ;; Si es b i hi ha historia, tornam a la ronda anterior
          ((and (eq cmd 'b) historia)
           (let ((estat-ant (car historia)))
             (bucle-partida (car estat-ant) 
@@ -143,7 +156,7 @@
                            (nth 5 estat-ant) 
                            dx dy (cdr historia) 0 nil)))
          
-         ;; 2. BOTÓ ENDAVANT (ENTER o qualsevol altra cosa)
+         ;; 2. BOTÓ ENDAVANT (o SALTAR)
          (t 
           (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2)))
                  (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
@@ -172,7 +185,7 @@
                            dx
                            dy
                            nova-historia
-                           0 nova-fletxes))))))))
+                           proxim-skip nova-fletxes))))))))
 
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
