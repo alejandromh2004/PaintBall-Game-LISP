@@ -102,6 +102,10 @@
 (defun BLACK () (color 0 0 0))
 (defun PINK () (color 255 0 255))
 
+;; Calcula la distància euclidiana al quadrat entre dos punts (ax, ay) i (bx, by)
+(defun distancia-quadrada (ax ay bx by)
+  (+ (* (- ax bx) (- ax bx))
+     (* (- ay by) (- ay by))))
 
 ;; ======================================================================
 ;; UTILITATS DE SISTEMA

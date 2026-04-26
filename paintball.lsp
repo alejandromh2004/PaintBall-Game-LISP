@@ -76,10 +76,10 @@
         (dy (random 1000)) ;; Desplaçament vertical aleatori per a les unitats
         (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
     ;; Inicialitza el bucle de la partida
-    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil 0 nil))) ;; Valors inicials del bucle
+    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil nil 0 nil))) ;; Valors inicials del bucle
 
 ;; Bucle principal del joc amb fletxes, gestió de l'historial de rondes i gestió de la memòria.
-(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia skip-visual fletxes-prev)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia futur skip-visual fletxes-prev)
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
        (dibuixa-mapa mapa ronda
@@ -147,52 +147,71 @@
 
          ;; Si es b i hi ha historia, tornam a la ronda anterior
          ((and (eq cmd 'b) historia)
-          (let ((estat-ant (car historia)))
+          (let ((estat-ant (car historia))
+                (estat-actual (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)))
             (bucle-partida (car estat-ant) 
                            (cadr estat-ant) 
                            (caddr estat-ant) 
                            (nth 3 estat-ant) 
                            (nth 4 estat-ant) 
                            (nth 5 estat-ant) 
-                           dx dy (cdr historia) 0 nil)))
+                           dx dy (cdr historia) (cons estat-actual futur) 0 nil)))
          
-         ;; 2. BOTÓ ENDAVANT (o SALTAR)
+         ;; Si es forward (f) i hi ha futur, anarem endavant
          (t 
-          (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2)))
-                 (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
-                 (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2)))
-                 (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici)))
-                 (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
-                 (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
-                 (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
-                 (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy nil))
-                 (nou-mapa (car estat-resultant))
-                 (nova-pintura-equip (cadr estat-resultant))
-                 (nova-memoria-equip (caddr estat-resultant))
-                 (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici)))
-                 (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
-                 (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
-                 (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2)))
-                 (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia))
-                 (nova-fletxes (nth 3 estat-resultant)))
+          (cond
+            ((and (eq cmd 'f) futur (<= skip-visual 0))
+             (let ((estat-seg (car futur)) ;; Següent estat (no es processa, tan sols se recupera)
+                   (estat-act (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)))
+               (bucle-partida (car estat-seg) ;; Següent ronda (ja processada)
+                              (cadr estat-seg) 
+                              (caddr estat-seg) 
+                              (nth 3 estat-seg) 
+                              (nth 4 estat-seg) 
+                              (nth 5 estat-seg) 
+                              dx dy 
+                              (cons estat-act historia) 
+                              (cdr futur) 
+                              0 nil)))
+            
+            ;; Si es forward (f) i no hi ha futur processam el torn
+            (t
+             (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))) ;; Rota els torns entre e1 i e2
+                    (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1))) ;; Recarrega la pintura de l'equip actiu i suma els labs
+                    (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2))) ;; Recarrega la pintura de l'equip actiu i suma els labs
+                    (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici))) ;; Pinta-equip es la pintura que s'utilitza en el torn
+                    (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2))) ;; La memoria del equip actiu
+                    (mapa-descansat (redueix-temps-mapa mapa equip-actiu)) ;; Redueix el temps de les unitats 
+                    (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0)) ;; Cerca les unitats de l'equip actiu
+                    (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy nil)) ;; Processa totes les unitats de l'equip actiu
+                    (nou-mapa (car estat-resultant)) ;; Nou mapa
+                    (nova-pintura-equip (cadr estat-resultant)) ;; Nova pintura del equip actiu
+                    (nova-memoria-equip (caddr estat-resultant)) ;; Nova memoria del equip actiu
+                    (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici))) ;; Nova pintura de l'equip 1
+                    (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici))) ;; Nova pintura de l'equip 2
+                    (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1))) ;; Nova memoria de l'equip 1
+                    (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2))) ;; Nova memoria de l'equip 2
+                    (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia)) ;; Nova historia
+                    (nova-fletxes (nth 3 estat-resultant))) ;; Fletxes del torn actual
 
-            (bucle-partida (+ ronda 1) 
-                           nou-mapa 
-                           nova-pint-e1 
-                           nova-pint-e2 
-                           nova-mem-e1 
-                           nova-mem-e2
-                           dx
-                           dy
-                           nova-historia
-                           proxim-skip nova-fletxes))))))))
+               (bucle-partida (+ ronda 1) 
+                              nou-mapa 
+                              nova-pint-e1 
+                              nova-pint-e2 
+                              nova-mem-e1 
+                              nova-mem-e2
+                              dx
+                              dy
+                              nova-historia
+                              nil ;; El futur es perd si processem un torn nou
+                              proxim-skip nova-fletxes))))))))))
 
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
 ;; ======================================================================
 
+;; Conta quantes bases té un equip en una fila
 (defun compta-bases-fila (fila equip)
-  "Compta quantes bases té un equip en una fila."
   (cond ((null fila) 0)
         (t (let ((casella (car fila)))
              (cond ((and (eq (car casella) 'terra)
@@ -201,8 +220,8 @@
                     (+ 1 (compta-bases-fila (cdr fila) equip)))
                    (t (compta-bases-fila (cdr fila) equip)))))))
 
+;; Conta quantes bases té un equip en tot el mapa
 (defun compta-bases-mapa (mapa equip)
-  "Compta quantes bases té un equip en tot el mapa."
   (cond ((null mapa) 0)
         (t (+ (compta-bases-fila (car mapa) equip)
               (compta-bases-mapa (cdr mapa) equip)))))
@@ -211,8 +230,8 @@
 ;; LÒGICA DE DESEMPAT
 ;; ======================================================================
 
+;; Conta quantes bolles té un equip en una fila
 (defun compta-bolles-fila (fila equip)
-  "Compta quantes bolles té un equip en una fila."
   (cond ((null fila) 0)
         (t (let ((casella (car fila)))
              (cond ((and (eq (car casella) 'terra)
@@ -221,14 +240,14 @@
                     (+ 1 (compta-bolles-fila (cdr fila) equip)))
                    (t (compta-bolles-fila (cdr fila) equip)))))))
 
+;; Conta quantes bolles té un equip en tot el mapa
 (defun compta-bolles-mapa (mapa equip)
-  "Compta quantes bolles té un equip en tot el mapa."
   (cond ((null mapa) 0)
         (t (+ (compta-bolles-fila (car mapa) equip)
               (compta-bolles-mapa (cdr mapa) equip)))))
 
+;; Determina el guanyador segons el criteri de desempat
 (defun determina-guanyador-empat (mapa pint-e1 pint-e2)
-  "Aplica el criteri de desimpat de l'enunciat."
   (let ((bolles-e1 (compta-bolles-mapa mapa 'e1))
         (bolles-e2 (compta-bolles-mapa mapa 'e2)))
     (format t "~%==================================================~%")
@@ -237,13 +256,13 @@
     (format t "   Pintura 1: ~A    | Pintura 2: ~A               ~%" pint-e1 pint-e2)
     (format t "==================================================~%")
     (cond 
-      ;; 1. Guanya l'equip amb més bolles vives.
+      ;; Guanya l'equip amb mes bolles vives
       ((> bolles-e1 bolles-e2) (format t "           GUANYA L'EQUIP 1 PER BOLLES!           ~%"))
       ((> bolles-e2 bolles-e1) (format t "           GUANYA L'EQUIP 2 PER BOLLES!           ~%"))
-      ;; 2. Guanya l'equip amb més reserva de pintura.
+      ;; Guanya l'equip amb mes reserva de pintura
       ((> pint-e1 pint-e2) (format t "          GUANYA L'EQUIP 1 PER PINTURA!           ~%"))
       ((> pint-e2 pint-e1) (format t "          GUANYA L'EQUIP 2 PER PINTURA!           ~%"))
-      ;; 3. Guanya un equip aleatòriament.
+      ;; Guanya un equip aleatòriament
       (t (let ((guanyador (nth (random 2) '(e1 e2))))
            (format t "          GUANYA L'EQUIP ~A PER SORT!             ~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
 
@@ -253,16 +272,15 @@
 ;; CERCA D'UNITATS
 ;; ======================================================================
 
+;; Comprova si una casella conté una base o bolla de l'equip indicat
 (defun es-unitat-equip (casella equip)
-  "Comprova si una casella conté una 'base' o 'bolla' de l'equip indicat."
-
   (and (eq (car casella) 'terra)            ;; Ha de ser terra
        (or (eq (caddr casella) 'base)       ;; Ha de ser una base
            (eq (caddr casella) 'bolla))     ;; o una bolla
        (eq (cadddr casella) equip)))        ;; I ha de pertànyer a l'equip
 
+;; Recorre una fila sencera i retorna una llista amb les coordenades (x y) de les unitats
 (defun busca-unitats-fila (fila equip x y)
-  "Recorre una fila sencera i retorna una llista amb les coordenades (x y) de les unitats."
   (cond ((null fila) nil)
         ;; Si la casella actual és una unitat nostra, afegim (x y) i seguim buscant
         ((es-unitat-equip (car fila) equip)
@@ -271,12 +289,12 @@
         (t
          (busca-unitats-fila (cdr fila) equip (+ x 1) y))))
 
+;; Recorre totes les files del mapa i n'ajunta els resultats
 (defun busca-unitats-mapa (mapa equip y)
-  "Recorre totes les files del mapa i n'ajunta els resultats."
   (cond ((null mapa) nil)
         (t
-         ;; Usam 'append' per unir la llista de coordenades de la fila actual 
-         ;; amb les llistes de les files inferiors.
+        ;; Rebem una llista amb les unitats de la fila actual
+        ;; i la concatenem amb les unitats de les files inferiors
          (append (busca-unitats-fila (car mapa) equip 0 y)
                  (busca-unitats-mapa (cdr mapa) equip (+ y 1))))))
 
@@ -285,32 +303,26 @@
 ;; SISTEMA DE VISIÓ
 ;; ======================================================================
 
-(defun distancia-quadrada (ax ay bx by)
-  "Calcula la distància euclidiana al quadrat entre dos punts (ax, ay) i (bx, by)."
-  (+ (* (- ax bx) (- ax bx))
-     (* (- ay by) (- ay by))))
-
+;; Adapta la informació d'una casella del mapa al format que demana l'enunciat per a l'agent
 (defun formateja-casella (coord casella dx dy)
-  "Adapta la informació d'una casella del mapa al format que demana l'enunciat per a la visió."
   (let ((tipus-casella (car casella))
         (coord-despla (list (+ (car coord) dx) (+ (cadr coord) dy))))
     (cond ((eq tipus-casella 'aigua)
            ;; L'aigua només necessita coordenada i tipus
            (list coord-despla 'aigua))
           (t
-           ;; La terra necessita tota la informació de l'element que hi ha a sobre
+           ;; La terra necessita tota la informació de l'element
            (let ((color-casella (cadr casella))
                  (element (caddr casella))
                  (equip (cadddr casella))
                  (colors-pintat (nth 4 casella))
                  (color-propi (nth 5 casella))
-                 (tr-p (nth 6 casella))
-                 (tr-m (nth 7 casella)))
-             ;; Retornem: (coord-despla tipus color element equip colors-pintat color-propi tr-pintar tr-moure)
+                 (tr-p (nth 6 casella)) ;; Temps per pintar
+                 (tr-m (nth 7 casella))) ;; Temps per moure
              (list coord-despla tipus-casella color-casella element equip colors-pintat color-propi tr-p tr-m))))))
 
+;; Recorre una fila i retorna només les caselles que estan dins del rang de visió
 (defun visio-fila (fila origen-x origen-y rang x y dx dy)
-  "Recorre una fila i retorna només les caselles que estan dins del rang de visió."
   (cond ((null fila) nil)
         ;; Si la distància al quadrat és menor o igual al rang, la casella és visible
         ((<= (distancia-quadrada origen-x origen-y x y) rang)
@@ -319,8 +331,8 @@
         ;; Si no és visible, la ignorem i seguim amb la següent
         (t (visio-fila (cdr fila) origen-x origen-y rang (+ x 1) y dx dy))))
 
+;; Recorre tot el mapa i ajunta les caselles visibles en una única llista
 (defun visio-mapa (mapa origen-x origen-y rang y dx dy)
-  "Recorre tot el mapa i ajunta les caselles visibles en una única llista."
   (cond ((null mapa) nil)
         (t (append (visio-fila (car mapa) origen-x origen-y rang 0 y dx dy)
                    (visio-mapa (cdr mapa) origen-x origen-y rang (+ y 1) dx dy)))))
@@ -330,8 +342,8 @@
 ;; EMPAQUETATGE I COMUNICACIÓ AMB ELS AGENTS
 ;; ======================================================================
 
+;; Construeix la llista d'estat que necessita l'agent
 (defun empaqueta-dades-unitat (mapa ronda equip pintura memoria x y dx dy)
-  "Construeix la llista d'estat exacta que necessita l'agent per prendre decisions."
   ;; Recorda que a la teva funció indexa-matriu, el segon paràmetre és la fila (y) i el tercer la columna (x)
   (let* ((casella (indexa-matriu mapa y x))
          (tipus-unitat (caddr casella))  ; Extraiem si és 'base o 'bolla
