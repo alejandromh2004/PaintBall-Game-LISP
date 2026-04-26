@@ -1,58 +1,29 @@
 ;; ======================================================================
 ;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
 ;; ======================================================================
-;; Estudiants: ABC, XYZ
-;; Data: 25/04/2026
+;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego
+;; Data: 30/04/2026
 ;; Assignatura: Llenguatges de Programació (LP)
 ;; Grup: <Indicar Grup>
 ;; Professors: <Indicar Professors>
 ;; Convocatòria: Primera Convocatòria (Ordinària)
-;;
-;; ----------------------------------------------------------------------
-;; FITXER: grafics.lsp
-;; DESCRIPCIÓ: Mòdul de representació gràfica complet de la partida.
-;;
-;; ASPECTES OPCIONALS IMPLEMENTATS (apartat "Mòdul gràfic"):
-;;   - Color del qual está pintada cada casella (fons tenyit per color-casella).
-;;   - Barres de temps de recuperació (cooldown) de pintar i moure per bolles.
-;;   - HUD visual INFERIOR: indicadors d'equip actiu, barres de pintura i
-;;     número de ronda actual (Ronda: X/1500).
-;;   - Laboratoris com a triangle gris/negre/blanc sense vora.
-;;   - Fletxes de moviment (taronja) i d'atac (vermell) sobre el mapa.
-;;   - Optimització: cls + redibuix complet cada torn.
-;;
-;; CANVIS RESPECTE A LA VERSIÓ ANTERIOR:
-;;   - console-h augmentat de 18 a 26 px perquè la primera fila del mapa
-;;     no quedi tapada per la consola de text.
-;;   - hud-h augmentat de 24 a 30 px per allotjar el número de ronda.
-;;   - gr-barra-ronda substituïda per gr-dibuixa-info-ronda: mostra una
-;;     petita barra de progrés I el text "Ronda: X/1500" sota ella.
-;;   - Separadors verticals del HUD reposicionats per al nou layout.
-;;
-;; DISSENY FUNCIONAL:
-;;   Totes les funcions són pures. El dibuix s'obté passant l'estat com a
-;;   paràmetre, sense mutació ni reassignació.
-;;
-;; ESTRUCTURA DE CASELLA (terra):
-;;   (terra color-casella element equip colors-pintat color-propi
-;;    tr-pintar tr-moure id-unitat)
-;; ======================================================================
+
 
 
 ;; ======================================================================
 ;; SECCIÓ 1 – PALETA DE COLORS
 ;; ======================================================================
 
-(defun gr-color-vermell () (color 215 35 35))    ; Vermell pur (r)
-(defun gr-color-verd ()    (color 35 155 45))    ; Verd natural (g)
-(defun gr-color-blau ()    (color 45 75 220))    ; Blau pur (b)
+(defun gr-color-vermell () (color 215 35 35))    ; Vermell(r)
+(defun gr-color-verd ()    (color 35 155 45))    ; Verd (g)
+(defun gr-color-blau ()    (color 45 75 220))    ; Blau (b)
 (defun gr-color-negre ()   (color 0   0   0))   ; Negre (equip 1)
 (defun gr-color-blanc ()   (color 255 255 255))  ; Blanc (equip 2)
 (defun gr-color-gris ()    (color 128 128 128))  ; Gris neutre (lab lliure)
 (defun gr-color-aigua ()   (color 55 120 210))   ; Blau de l'aigua
 (defun gr-color-hud ()     (color 18 18 28))     ; Fons del HUD
 
-;; Aplica el color de pintura (vermell/verd/blau reals, no neon).
+;; Aplica el color de pintura
 ;; Paràmetres:
 ;;   c - símbol 'r, 'g o 'b
 (defun gr-aplica-color-pintura (c)
@@ -61,7 +32,7 @@
         ((eq c 'b) (gr-color-blau))
         (t         (gr-color-gris))))
 
-;; Aplica el color de vora d'equip: e1=negre, e2=blanc.
+;; Aplica el color de vora d'equip: e1=negre, e2=blanc
 ;; Paràmetres:
 ;;   e - símbol 'e1 o 'e2
 (defun gr-aplica-color-equip (e)
@@ -69,14 +40,14 @@
         ((eq e 'e2) (gr-color-blanc))
         (t          (gr-color-gris))))
 
-;; Color contrastat per a símbols sobre el cos d'una unitat d'equip e.
+;; Color contrastat per a símbols sobre el cos d'una unitat d'equip e
 ;; Paràmetres:
 ;;   e - símbol 'e1 o 'e2
 (defun gr-aplica-color-equip-contrast (e)
   (cond ((eq e 'e1) (gr-color-blanc))
         (t          (gr-color-negre))))
 
-;; Fons tenyit d'una casella de terra pintada del color c.
+;; Fons tenyit d'una casella de terra pintada del color c
 ;; Implementa la funcionalitat opcional de mostrar el color de la casella.
 ;; Paràmetres:
 ;;   c - símbol 'r, 'g, 'b o nil
@@ -84,16 +55,14 @@
   (cond ((eq c 'r) (color 255 210 210))   ; Vermell suau
         ((eq c 'g) (color 210 245 210))   ; Verd suau
         ((eq c 'b) (color 210 220 255))   ; Blau suau
-        (t         (color 225 225 225)))) ; Gris neutre (sense pintura)
+        (t         (color 225 225 225)))) ; Gris neutre
 
 
 ;; ======================================================================
 ;; SECCIÓ 2 – PRIMITIVES DE DIBUIX
 ;; ======================================================================
 
-;; Dibuixa un rectangle ple de w×h píxels a la posició absoluta (x, y).
-;; Utilitza omple-linies (de funciones_auxiliares.lsp) passant h-1 perquè
-;; aquella funció dibuixa files-restants+1 línies (condició < 0).
+;; Dibuixa un rectangle ple de w×h píxels a la posició absoluta (x, y)
 ;; Paràmetres:
 ;;   x, y - cantonada superior-esquerra
 ;;   w, h - amplada i alçada en píxels
@@ -102,7 +71,7 @@
         (t (move x y)
            (omple-linies w (- h 1)))))
 
-;; Dibuixa el contorn d'un rectangle de w×h a la posició (x, y).
+;; Dibuixa el contorn d'un rectangle de w×h a la posició (x, y)
 ;; Paràmetres:
 ;;   x, y - cantonada superior-esquerra
 ;;   w, h - amplada i alçada en píxels
@@ -114,7 +83,7 @@
            (drawrel (- w) 0)
            (drawrel 0 (- h)))))
 
-;; Dibuixa una línia horitzontal d'amplada w a (x, y).
+;; Dibuixa una línia horitzontal d'amplada w a (x, y)
 ;; Paràmetres:
 ;;   x, y - punt d'inici
 ;;   w    - amplada en píxels
@@ -123,7 +92,7 @@
         (t (move x y)
            (drawrel w 0))))
 
-;; Dibuixa una línia recta de (x1,y1) a (x2,y2).
+;; Dibuixa una línia recta de (x1,y1) a (x2,y2)
 ;; Paràmetres:
 ;;   x1, y1 - punt d'origen (absolut)
 ;;   x2, y2 - punt de destinació (absolut)
@@ -131,17 +100,16 @@
   (move x1 y1)
   (drawrel (- x2 x1) (- y2 y1)))
 
-;; Dibuixa un triangle ple (△) a la posició (tx, ty) amb mides (tw × th).
-;; Utilitza omple-tri de funciones_auxiliares.lsp.
+;; Dibuixa un triangle ple a la posició (tx, ty) amb mides (tw × th)
 ;; Paràmetres:
-;;   tx, ty   - cantonada superior-esquerra del bounding box
+;;   tx, ty   - cantonada superior-esquerra
 ;;   tw, th   - amplada i alçada del triangle
 (defun gr-triangle-ple (tx ty tw th)
   (cond ((or (<= tw 0) (<= th 0)) nil)
         (t (move tx ty)
            (omple-tri tw th 0))))
 
-;; Dibuixa el contorn d'un triangle (△) a la posició (tx, ty).
+;; Dibuixa el contorn d'un triangle a la posició (tx, ty).
 ;; Paràmetres: igual que gr-triangle-ple
 (defun gr-triangle-contorn (tx ty tw th)
   (cond ((or (<= tw 0) (<= th 0)) nil)
@@ -150,35 +118,28 @@
 
 
 ;; ======================================================================
-;; SECCIÓ 3 – MARKS DE DANY (COLORS PINTATS)
-;; ======================================================================
-;;
-;; Cada color pintat es mostra com un quadradet de (md × md) píxels
-;; a una cantonada fixada de la casella:
-;;   r = cantonada superior-esquerra
-;;   g = cantonada superior-dreta
-;;   b = cantonada inferior-esquerra
+;; SECCIÓ 3 – MARQUES DE DANY
 ;; ======================================================================
 
-;; Calcula la mida del marc de dany en funció de la mida de casella m.
+;; Calcula la mida de la marca de dany en funció de la mida de casella m
 ;; Paràmetres:
 ;;   m - mida de la casella en píxels
 (defun gr-mida-marc (m)
   (max 2 (min 5 (round (/ m 3)))))
 
-;; Dibuixa un únic marc de dany de color c a la cantonada corresponent.
+;; Dibuixa una única marca de dany de color c a la cantonada corresponent.
 ;; Paràmetres:
 ;;   c      - símbol 'r, 'g o 'b
 ;;   bx, by - cantonada superior-esquerra de la casella
 ;;   m      - mida de la casella
-;;   md     - mida del marc de dany
+;;   md     - mida de la marca de dany
 (defun gr-dibuixa-marc (c bx by m md)
   (gr-aplica-color-pintura c)
   (cond ((eq c 'r) (gr-fill bx by md md))
         ((eq c 'g) (gr-fill (- (+ bx m) md) by md md))
         ((eq c 'b) (gr-fill bx (- (+ by m) md) md md))))
 
-;; Dibuixa tots els marks de dany d'una llista de colors pintats.
+;; Dibuixa totes les marques de dany d'una llista de colors pintats.
 ;; Paràmetres:
 ;;   colors - llista de símbols ('r 'g 'b)
 ;;   bx, by - cantonada superior-esquerra de la casella
@@ -191,16 +152,10 @@
 
 
 ;; ======================================================================
-;; SECCIÓ 4 – BARRES DE COOLDOWN (ASPECTE OPCIONAL)
-;; ======================================================================
-;;
-;; Cada bolla mostra dues barres a la part inferior de la seva casella:
-;;   - Barra superior: cooldown de moure (tr-moure), color taronja
-;;   - Barra inferior: cooldown de pintar (tr-pintar), color vermell
-;; Quan el cooldown és 0, la barra no es dibuixa (a punt per actuar).
+;; SECCIÓ 4 – BARRES DE COOLDOWN
 ;; ======================================================================
 
-;; Dibuixa una barra de cooldown horitzontal.
+;; Dibuixa una barra de cooldown horitzontal
 ;; Paràmetres:
 ;;   tr     - valor actual del cooldown (real o nil)
 ;;   tr-max - valor màxim de referència per a escalar la barra
@@ -219,7 +174,7 @@
            (color c-r c-g c-b)
            (gr-fill px py ple bh)))))
 
-;; Dibuixa les dues barres de cooldown d'una bolla.
+;; Dibuixa les dues barres de cooldown d'una bolla
 ;; Paràmetres:
 ;;   tr-pintar - temps de recuperació de l'acció pintar
 ;;   tr-moure  - temps de recuperació de l'acció moure
@@ -242,13 +197,7 @@
 ;; SECCIÓ 5 – DIBUIX DE CADA TIPUS D'ELEMENT
 ;; ======================================================================
 
-;; --- 5a. BASE ---
-;;
-;; Dibuixa una base com un quadrat gran amb una creu interior.
-;; L'equip es diferencia pel color de farcit: e1=negre, e2=blanc.
-;; La creu interior és del color contrastat.
-;; Marks de dany als cantons externs.
-;;
+;; Dibuixa una base
 ;; Paràmetres:
 ;;   bx, by       - cantonada superior-esquerra de la casella
 ;;   m            - mida de la casella
@@ -265,30 +214,19 @@
          ;; Gruix de la creu (mínim 1px, proporcional)
          (gc   (max 1 (round (/ sz 5)))))
 
-    ;; Cos de la base: quadrat del color d'equip
     (gr-aplica-color-equip equip)
     (gr-fill ix iy sz sz)
-
-    ;; Vora del mateix color d'equip per a un aspecte sòlid
     (gr-stroke ix iy sz sz)
     (cond ((>= sz 6)
            (gr-stroke (+ ix 1) (+ iy 1) (- sz 2) (- sz 2))))
 
-    ;; Creu interior del mateix color (sòlid)
     (gr-fill (- cx (round (/ gc 2))) iy gc sz)   ; Vertical
     (gr-fill ix (- cy (round (/ gc 2))) sz gc)   ; Horitzontal
-
-    ;; Marks de dany als cantons (DAMUNT del cos, per visibilitat)
     (gr-dibuixa-danys colors-pintat bx by m)))
 
 
-;; --- 5b. BOLLA ---
-;;
-;; Dibuixa una bolla com un quadrat interior del color propi,
-;; amb una vora exterior del color d'equip (e1=negre, e2=blanc).
-;; Els marks de dany es dibuixen als cantons de la casella.
-;; Les barres de cooldown es dibuixen a la part inferior.
-;;
+
+;; Dibuixa una bolla
 ;; Paràmetres:
 ;;   bx, by        - cantonada superior-esquerra de la casella
 ;;   m             - mida de la casella
@@ -303,7 +241,6 @@
          (ix    (+ bx pad))
          (iy    (+ by pad)))
 
-    ;; Vora d'equip: quadrat 1px més gran que el cos (amb color d'equip)
     (gr-aplica-color-equip equip)
     (gr-fill (- ix 1) (- iy 1) (+ inner 2) (+ inner 2))
 
@@ -311,19 +248,12 @@
     (gr-aplica-color-pintura color-propi)
     (gr-fill ix iy inner inner)
 
-    ;; Barres de cooldown a la part inferior (aspecte opcional)
+    ;; Barres de cooldown a la part inferior
     (gr-dibuixa-cooldowns tr-pintar tr-moure bx by m)
-
-    ;; Marks de dany als cantons (damunt de tot)
     (gr-dibuixa-danys colors-pintat bx by m)))
 
 
-;; --- 5c. LABORATORI ---
-;;
-;; Dibuixa un laboratori com un triangle ple i sense vora.
-;; No capturat: gris.  Equip 1: negre.  Equip 2: blanc.
-;; (No té contorn per disseny: es vol un triangle net i minimalista.)
-;;
+;; Dibuixa un laboratori
 ;; Paràmetres:
 ;;   bx, by - cantonada superior-esquerra de la casella
 ;;   m      - mida de la casella
@@ -428,17 +358,7 @@
 
 
 ;; ======================================================================
-;; SECCIÓ 8 – FLETXES D'ACCIONS (ASPECTE OPCIONAL)
-;; ======================================================================
-;;
-;; Les fletxes es dibuixen DAMUNT del mapa, un cop totes les caselles
-;; han estat pintades.
-;;
-;; Cada element de la llista fletxes té forma:
-;;   (tipus (col-orig row-orig) (col-dest row-dest))
-;; on tipus és 'mou (taronja) o 'pinta (vermell).
-;;
-;; Les coordenades són índexs reals de la matriu (sense desplaçament).
+;; SECCIÓ 8 – FLETXES D'ACCIONS
 ;; ======================================================================
 
 ;; Dibuixa una fletxa des del centre de la casella (x1,y1) fins a (x2,y2).
@@ -487,24 +407,7 @@
 
 
 ;; ======================================================================
-;; SECCIÓ 9 – HUD (PANELL D'INFORMACIÓ INFERIOR)
-;; ======================================================================
-;;
-;; El HUD es dibuixa a la PART INFERIOR de la finestra.
-;;
-;; CANVIS respecte a la versió anterior:
-;;   - hud-h augmentat a 30 px per tenir espai per al número de ronda.
-;;   - La barra de progrés de ronda s'ha substituït per gr-dibuixa-info-ronda,
-;;     que mostra una petita barra de color + el número "Ronda: X/1500"
-;;     escrit amb draw-string (disponible a XLISP-PLUS via common.lsp).
-;;
-;; Contingut del HUD (d'esquerra a dreta):
-;;   - Franja lateral de l'equip actiu (3 px, alçada completa del HUD)
-;;   - E1: indicador quadrat (negre) + barra de pintura
-;;   - E2: indicador quadrat (blanc) + barra de pintura
-;;   - Llegenda de colors (R, G, B, Lab)
-;;   - Número de ronda: barra de progrés + text "Ronda: X/1500"
-;;   - Punt indicador de l'equip actiu (extrem dret)
+;; SECCIÓ 9 – HUD
 ;; ======================================================================
 
 ;; Dibuixa marques verticals a la barra de pintura cada 100 unitats.
@@ -654,31 +557,7 @@
 ;; SECCIÓ 10 – FUNCIÓ PRINCIPAL
 ;; ======================================================================
 
-;; Funció principal de gràfics. Calcula la mida de casella òptima,
-;; esborra la pantalla, dibuixa el mapa + fletxes d'accions + HUD.
-;;
-;; CANVIS respecte a la versió anterior:
-;;   - console-h augmentat de 18 a 26 px per evitar que la primera fila
-;;     del mapa quedi tapada pel text de la consola de XLISP-PLUS.
-;;   - hud-h augmentat de 24 a 30 px per allotjar el text de la ronda.
-;;   - Ja no rep (BLACK) des de paintball.lsp entre el dibuix i el prompt,
-;;     de manera que el HUD resta visible mentre s'espera input.
-;;
-;; Paràmetres:
-;;   mapa        - matriu de caselles (llista de llistes)
-;;   ronda       - número de ronda actual (enter)
-;;   equip-actiu - símbol 'e1 o 'e2
-;;   pint-e1     - quantitat de pintura de l'equip 1 (enter)
-;;   pint-e2     - quantitat de pintura de l'equip 2 (enter)
-;;   fletxes     - llista de fletxes del torn anterior (pot ser nil)
-;;                 Cada element: (tipus (col-orig row-orig) (col-dest row-dest))
-;;                 tipus: 'mou (taronja) o 'pinta (vermell)
-;;
-;; CRIDA EN paintball.lsp:
-;;   (dibuixa-mapa mapa ronda
-;;                 (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
-;;                 pint-e1 pint-e2
-;;                 fletxes-prev)
+;; Dibuixa el mapa, les fletxes d'accions i el HUD
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
     (let* ((files     (length mapa))
          (cols      (length (car mapa)))
