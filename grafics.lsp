@@ -405,156 +405,8 @@
             (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-x offset-y files)
             (gr-dibuixa-fletxes (cdr fletxes) m offset-x offset-y files)))))
 
-
 ;; ======================================================================
-;; SECCIÓ 9 – HUD
-;; ======================================================================
-
-;; Dibuixa marques verticals a la barra de pintura cada 100 unitats.
-;; Paràmetres:
-;;   px, py - cantonada de la barra
-;;   bw, bh - amplada i alçada de la barra
-(defun gr-marques-pintura (px py bw bh)
-  ;; Marques cada 100 unitats dins de rang 0..500
-  (let ((pas (round (/ bw 5.0))))
-    (color 80 80 80)
-    (gr-linia-h (+ px pas)           (- py 1) 1)
-    (gr-linia-h (+ px (* 2 pas))     (- py 1) 1)
-    (gr-linia-h (+ px (* 3 pas))     (- py 1) 1)
-    (gr-linia-h (+ px (* 4 pas))     (- py 1) 1)))
-
-;; Dibuixa la barra de pintura d'un equip al HUD.
-;; Paràmetres:
-;;   px, py  - posició de la barra
-;;   bw, bh  - amplada i alçada de la barra
-;;   pintura - quantitat actual de pintura
-;;   equip   - 'e1 o 'e2 (determina el color de la barra)
-(defun gr-barra-pintura (px py bw bh pintura equip)
-  (let ((ple (max 0 (round (/ (* bw (min pintura 500.0)) 500.0)))))
-    ;; Fons fosc
-    (color 40 40 40)
-    (gr-fill px py bw bh)
-    ;; Part plena: color propi de l'equip (negre/blanc)
-    (gr-aplica-color-equip equip)
-    (cond ((> ple 0) (gr-fill px py ple bh)))
-    ;; Marques cada 100 unitats
-    (gr-marques-pintura px py bw bh)
-    ;; Vora fina
-    (color 90 90 90)
-    (gr-stroke px py bw bh)))
-
-
-;; Dibuixa la secció de ronda del HUD: petita barra de progrés (verd->groc->vermell)
-;; i el text "Ronda: X/1500" escrit amb draw-string.
-;; El text ocupa la part inferior, la barra la superior.
-;;
-;; Paràmetres:
-;;   px, py  - cantonada superior-esquerra de la zona de ronda
-;;   bw      - amplada total disponible per a la zona de ronda
-;;   hud-h   - alçada total del HUD (per calcular posicions internes)
-;;   ronda   - ronda actual (enter)
-(defun gr-dibuixa-info-ronda (px py bw hud-h ronda)
-  ;; Barra de progrés (verd->groc->vermell) que ocupa tota l'alçada disponible
-  (let* ((bh  (- hud-h 8))
-         (ple (max 0 (round (/ (* bw (min ronda 1500.0)) 1500.0)))))
-    (color 40 40 40)
-    (gr-fill px py bw bh)
-    (cond ((< ronda 500)  (color 50  180 80))
-          ((< ronda 1000) (color 200 180 50))
-          (t              (color 200  60 60)))
-    (cond ((> ple 0) (gr-fill px py ple bh)))
-    ;; Marques als terços (500 i 1000 rondes)
-    (color 90 90 90)
-    (gr-stroke px py bw bh)
-    (let ((t1 (round (/ bw 3.0)))
-          (t2 (round (/ (* bw 2.0) 3.0))))
-      (color 120 120 120)
-      (gr-linia-h (+ px t1) py 1)
-      (gr-linia-h (+ px t1) (+ py 1) 1)
-      (gr-linia-h (+ px t2) py 1)
-      (gr-linia-h (+ px t2) (+ py 1) 1))))
-
-
-;; Dibuixa el HUD complet a la part inferior de la finestra.
-;; Paràmetres:
-;;   ronda       - número de ronda actual
-;;   equip-actiu - símbol 'e1 o 'e2
-;;   pint-e1     - pintura actual de l'equip 1
-;;   pint-e2     - pintura actual de l'equip 2
-;;   hud-y       - coordenada y d'inici del HUD (baix de la pantalla)
-;;   hud-h       - alçada del HUD en píxels
-(defun gr-dibuixa-hud (ronda equip-actiu pint-e1 pint-e2 hud-y hud-h)
-  (let* (;; Posicions verticals centrades dins el HUD (fila de barres/indicadors)
-         (y4   (+ hud-y 4))          ; Y per a quadrats d'equip
-         (y6   (+ hud-y 6))          ; Y per a barres de pintura
-         (bh   8))                   ; Alçada de les barres de pintura
-
-    ;; === Fons fosc del HUD ===
-    (gr-color-hud)
-    (gr-fill -10 hud-y 660 hud-h)
-
-    ;; === Franja lateral d'equip actiu (3px -> 5px per seguretat) ===
-    (gr-aplica-color-equip equip-actiu)
-    (gr-fill -10 hud-y 10 hud-h)
-
-    ;; === Equip 1 ===
-    ;; Quadrat indicador (negre amb vora blanca)
-    (gr-color-negre)
-    (gr-fill 8 y4 12 12)
-    (gr-color-blanc)
-    (gr-stroke 8 y4 12 12)
-    ;; Barra de pintura E1 amb marques cada 100
-    (gr-barra-pintura 24 y6 150 bh pint-e1 'e1)
-
-    ;; === Equip 2 ===
-    ;; Quadrat indicador (blanc amb vora negra)
-    (gr-color-blanc)
-    (gr-fill 184 y4 12 12)
-    (gr-color-negre)
-    (gr-stroke 184 y4 12 12)
-    ;; Barra de pintura E2 amb marques cada 100
-    (gr-barra-pintura 200 y6 150 bh pint-e2 'e2)
-
-    ;; === Separador vertical central ===
-    (color 55 55 75)
-    (gr-fill 360 (+ hud-y 2) 1 (- hud-h 4))
-
-    ;; === Llegenda de colors ===
-    ;; R (vermell)
-    (gr-color-vermell)
-    (gr-fill 368 y4 8 8)
-    ;; G (verd)
-    (gr-color-verd)
-    (gr-fill 381 y4 8 8)
-    ;; B (blau)
-    (gr-color-blau)
-    (gr-fill 394 y4 8 8)
-    ;; Lab (gris = no capturat)
-    (gr-color-gris)
-    (gr-fill 407 y4 8 8)
-
-    ;; === Separador vertical dret ===
-    (color 55 55 75)
-    (gr-fill 422 (+ hud-y 2) 1 (- hud-h 4))
-
-    ;; === Número de ronda: barra de progrés + text "Ronda: X/1500" ===
-    ;; Zona: x=424, amplada=194, hud-h total disponible
-    (gr-dibuixa-info-ronda 424 (+ hud-y 4) 194 hud-h ronda)
-
-    ;; === Indicador de torn actiu (extrem dret) ===
-    ;; Petit quadrat del color de l'equip actiu
-    (gr-aplica-color-equip equip-actiu)
-    (gr-fill 622 y4 12 12)
-    (gr-aplica-color-equip-contrast equip-actiu)
-    (gr-stroke 622 y4 12 12)
-
-    ;; === Línia separadora superior del HUD ===
-    (color 55 55 75)
-    (gr-linia-h 0 (+ hud-y hud-h) 640)))
-
-
-;; ======================================================================
-;; SECCIÓ 10 – FUNCIÓ PRINCIPAL
+;; SECCIÓ 9 – FUNCIÓ PRINCIPAL
 ;; ======================================================================
 
 ;; Dibuixa el mapa, les fletxes d'accions i el HUD
@@ -563,30 +415,28 @@
          (cols      (length (car mapa)))
          ;; Reduïm l'espai de consola a dalt per guanyar espai per al mapa
          (console-h 30)
-         (hud-h     30)
-         ;; Zona disponible per al mapa (més gran ara)
-         (area-h    (- 400 hud-h console-h))
+         ;; Zona disponible per al mapa
+         (area-h    (- 400 console-h))
          ;; Mida de casella: la mínima de les dues dimensions
          (m-files   (floor (/ area-h (max 1 files))))
          (m-cols    (floor (/ 640    (max 1 cols))))
          (m         (max 1 (min m-files m-cols)))
          ;; Espai sobrant vertical
          (extra-h   (- area-h (* files m)))
-         (hud-y     0)                   ; HUD a la base de la pantalla
-         ;; Fixem el mapa a baix (sobre el HUD + 2px) perquè creixi cap amunt
-         (offset-y  (+ hud-h 2))
+         ;; Fixem el mapa a baix (sobre la base + 2px) perquè creixi cap amunt
+         (offset-y  2)
          ;; Centratge horitzontal: repartim l'espai sobrant (extra-w)
          (extra-w   (- 640 (* cols m)))
          (offset-x  (floor (/ extra-w 2)))) ; Mapa centrat horitzontalment
 
     ;; Esborra tota la pantalla
     (cls)
-
-    ;; 1. Dibuixa el mapa (entre la zona de consola i el HUD)
+    
+    ;; 1. Dibuixa el mapa
     (gr-dibuixa-files mapa 0 m offset-x offset-y files)
 
     ;; 2. Dibuixa les fletxes d'accions damunt del mapa
     (gr-dibuixa-fletxes fletxes m offset-x offset-y files)
-
-    ;; 3. Dibuixa el HUD (a la part inferior, sempre visible)
-    (gr-dibuixa-hud ronda equip-actiu pint-e1 pint-e2 hud-y hud-h)))
+    
+    ;; 3. Restableix el color de la consola a negre
+    (BLACK)))
