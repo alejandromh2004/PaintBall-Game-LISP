@@ -14,4 +14,4 @@ Tot el projecte s'ha desenvolupat complint amb les restriccions habituals de dis
 
 (load "proyectos/projecte_inicial/paintball.lsp")
 
-(inici "proyectos/projecte_inicial/maps/huge.map")
+(inici "proyectos/projecte_inicial/maps/two.map")
