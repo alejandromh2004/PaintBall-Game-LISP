@@ -18,7 +18,7 @@
 (load "proyectos/projecte_inicial/agent-xyz999.lsp")
 
 ;; Punt d'entrada del programa
-(defun inici (&optional (fitxer "proyectos/projecte_inicial/maps/bait.map"))
+(defun inici (&optional (fitxer "proyectos/projecte_inicial/maps/two.map"))
   (BLACK) 
   (mode 0 0 640 400) 
   

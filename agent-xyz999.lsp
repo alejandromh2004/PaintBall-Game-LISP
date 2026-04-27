@@ -107,6 +107,12 @@
         ((equal (car lst) elem) (agent-xyz999-elimina elem (cdr lst)))
         (t (cons (car lst) (agent-xyz999-elimina elem (cdr lst))))))
 
+(defun agent-xyz999-butlast (lst)
+  "Retorna la llista sense l'últim element (evaporació). Funció pura."
+  (cond ((null lst) nil)
+        ((null (cdr lst)) nil)
+        (t (cons (car lst) (agent-xyz999-butlast (cdr lst))))))
+
 
 ;; ======================================================================
 ;; SECCIÓ 2: MEMÒRIA COMPARTIDA (a-list pura, sense mutació)
@@ -129,10 +135,11 @@
         (t (cons (car mem) (agent-xyz999-set clau val (cdr mem))))))
 
 (defun agent-xyz999-afegir-coord (coord lst max-n)
-  "Afegeix coord a lst si no hi és ja i la llista té menys de max-n elements.
-   coord: (x y). lst: llista de coords. max-n: límit."
+  "Afegeix coord al principi de lst si no hi és ja. 
+   Si s'arriba al límit max-n, evapora la feromona més antiga (última)."
   (cond ((agent-xyz999-membre coord lst) lst)
-        ((>= (agent-xyz999-longitud lst) max-n) lst)
+        ((>= (agent-xyz999-longitud lst) max-n)
+         (cons coord (agent-xyz999-butlast lst)))
         (t (cons coord lst))))
 
 ;; ---- Accessors per unit-phases (claus numèriques: usa = en comptes de eq) ----
@@ -540,7 +547,7 @@
           ((and (>= (agent-xyz999-dist-q m desti) (agent-xyz999-dist-q coord desti))
                 (not (agent-xyz999-es-tabu coord tabu-list)))
            (agent-xyz999-set 'tabu-list 
-             (agent-xyz999-afegir-coord coord tabu-list 80) mem))
+             (agent-xyz999-afegir-coord coord tabu-list 150) mem))
           (t mem))))
 
 (defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure
