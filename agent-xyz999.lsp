@@ -1,12 +1,12 @@
 ;; ======================================================================
-;; AGENT FUNCIONAL COMPLET v2 - MOVIMENT MILLORAT
-;; Canvis clau:
-;;   1. Destí d'exploració = posició ACTUAL + vector, no base + vector
-;;   2. Tabu GRADUAT (600/250/80/20) en lloc de 10000 pla
-;;   3. Penalització ANTI-RAMADA: repulsa per aliats propers a la visió
-;;   4. Historial ampliat a 6 posicions
-;;   5. Pertorbació per ronda: quan atascats, el cost s'escala per evitar
-;;      que tots convergeixin al mateix candidat
+;; AGENT FUNCIONAL COMPLET v3 - ESCAPADA DE CALLEJONS + OPTIMITZACIÓ
+;; Canvis respecte v2:
+;;   1. Detecció de bloqueig (is-stuck): 4 posicions dins dist²<10 → stuck
+;;   2. Rotació de direcció per unitat (unit-dirs en memòria)
+;;      → cada vegada que es queda atrapat, gira +1 direcció fins sortir
+;;   3. Límit de labs a 15 entrades (evita O(n) creixent)
+;;   4. Límit d'aliats visibles a 6 abans del càlcul anti-ramada
+;;   5. dir-idx s'obté de la memòria (no de abs-id fix)
 ;; ======================================================================
 
 (defun agent-xyz999-abs (n)
@@ -63,6 +63,37 @@
     (agent-xyz999-set 'unit-paths nous-paths mem)))
 
 ;; ======================================================================
+;; DETECCIÓ DE BLOQUEIG I GESTIÓ DE DIRECCIONS
+;; ======================================================================
+
+(defun agent-xyz999-is-stuck (unit-path)
+  "Retorna t si les últimes 4 posicions estan totes dins dist²<10 entre si.
+   Indica que l'agent porta rodes girant al mateix lloc (dead-end o ramada)."
+  (cond ((< (agent-xyz999-longitud unit-path) 4) nil)
+        (t (let* ((p0 (car unit-path))
+                  (p1 (agent-xyz999-nth 1 unit-path))
+                  (p2 (agent-xyz999-nth 2 unit-path))
+                  (p3 (agent-xyz999-nth 3 unit-path)))
+             (cond ((or (null p0) (null p1) (null p2) (null p3)) nil)
+                   (t (and (< (agent-xyz999-dist-q p0 p1) 10)
+                           (< (agent-xyz999-dist-q p0 p2) 10)
+                           (< (agent-xyz999-dist-q p0 p3) 10))))))))
+
+(defun agent-xyz999-get-dir (id mem)
+  "Obté la direcció actual d'una unitat (default: abs-id mod 8)."
+  (let* ((dirs (agent-xyz999-get 'unit-dirs mem))
+         (d    (cond (dirs (agent-xyz999-get id dirs)) (t nil))))
+    (cond ((null d) (rem (agent-xyz999-abs id) 8))
+          (t d))))
+
+(defun agent-xyz999-set-dir (id dir mem)
+  "Desa la nova direcció d'una unitat a la memòria."
+  (let* ((dirs     (agent-xyz999-get 'unit-dirs mem))
+         (safe-dirs (cond (dirs dirs) (t nil)))
+         (new-dirs (agent-xyz999-set id dir safe-dirs)))
+    (agent-xyz999-set 'unit-dirs new-dirs mem)))
+
+;; ======================================================================
 ;; ACCESSORS PER A LA VISIÓ
 ;; ======================================================================
 
@@ -94,9 +125,11 @@
                         (t mem)))
 
               (labs (agent-xyz999-get 'labs m1))
+              ;; CANVI v3: labs limitat a 15 entrades per evitar creixement O(n)
               (m2 (cond ((and (eq elem 'lab) (not (eq eq-c equip)))
                          (cond ((not (agent-xyz999-membre coord labs))
-                                (agent-xyz999-set 'labs (cons coord labs) m1))
+                                (agent-xyz999-set 'labs
+                                  (agent-xyz999-take 15 (cons coord labs)) m1))
                                (t m1)))
                         ((and (eq elem 'lab) (eq eq-c equip))
                          (agent-xyz999-set 'labs (agent-xyz999-elimina coord labs) m1))
@@ -139,27 +172,30 @@
 
 ;; ======================================================================
 ;; ANTI-RAMADA: detectar aliats a la visió
+;; CANVI v3: limitem a 6 aliats per evitar cost O(n²) amb molts agents
 ;; ======================================================================
 
-(defun agent-xyz999-allies-vis (vis equip)
-  "Retorna una llista de coords dels aliats (bolles) visibles."
-  (cond ((null vis) nil)
+(defun agent-xyz999-allies-vis-acc (vis equip n)
+  "Recull fins a n aliats (bolles) visibles. Limit per eficiència."
+  (cond ((or (null vis) (<= n 0)) nil)
         (t (let* ((c    (car vis))
                   (elem (agent-xyz999-c-elem c))
                   (eq-c (agent-xyz999-c-equip c)))
              (cond ((and (eq elem 'bolla) (eq eq-c equip))
                     (cons (agent-xyz999-c-coord c)
-                          (agent-xyz999-allies-vis (cdr vis) equip)))
-                   (t (agent-xyz999-allies-vis (cdr vis) equip)))))))
+                          (agent-xyz999-allies-vis-acc (cdr vis) equip (- n 1))))
+                   (t (agent-xyz999-allies-vis-acc (cdr vis) equip n)))))))
+
+(defun agent-xyz999-allies-vis (vis equip)
+  (agent-xyz999-allies-vis-acc vis equip 6))
 
 (defun agent-xyz999-penalty-ramada (co allies)
-  "Penalitza el moviment cap a posicions properes a aliats."
   (cond ((null allies) 0)
         (t (let ((dist (agent-xyz999-dist-q co (car allies))))
-             (+ (cond ((= dist 0) 2000)   ; ocupat per aliat
-                      ((< dist 3) 600)    ; distància 1 (adjacent)
-                      ((< dist 8) 200)    ; distància 2
-                      ((< dist 18) 60)    ; distància 3
+             (+ (cond ((= dist 0) 2000)
+                      ((< dist 3) 600)
+                      ((< dist 8) 200)
+                      ((< dist 18) 60)
                       (t 0))
                 (agent-xyz999-penalty-ramada co (cdr allies)))))))
 
@@ -168,8 +204,6 @@
 ;; ======================================================================
 
 (defun agent-xyz999-tabu-penalty (co unit-path idx)
-  "Penalitza posicions recents de forma decreixent:
-   posició t-1=600, t-2=250, t-3=80, t-4=30, t-5+=10"
   (cond ((null unit-path) 0)
         ((equal co (car unit-path))
          (cond ((= idx 0) 600)
@@ -180,7 +214,7 @@
         (t (agent-xyz999-tabu-penalty co (cdr unit-path) (+ idx 1)))))
 
 ;; ======================================================================
-;; NAVEGACIÓ: MOVIBLES I COST MILLORAT
+;; NAVEGACIÓ: MOVIBLES I COST
 ;; ======================================================================
 
 (defun agent-xyz999-movibles (vis coord)
@@ -195,7 +229,6 @@
                    (t (agent-xyz999-movibles (cdr vis) coord)))))))
 
 (defun agent-xyz999-cost-mov (co desti unit-path allies)
-  "Cost total = distància al destí + penalització tabu + repulsió ramada."
   (let* ((dist   (agent-xyz999-dist-q co desti))
          (tabu   (agent-xyz999-tabu-penalty co unit-path 0))
          (ramada (agent-xyz999-penalty-ramada co allies)))
@@ -211,12 +244,12 @@
                     (agent-xyz999-millor-mov (cdr movibles) desti unit-path allies best-coord best-cost)))))))
 
 ;; ======================================================================
-;; DESTINS: BASATS EN POSICIÓ ACTUAL (no en coordenades absolutes!)
+;; DESTINS: BASATS EN POSICIÓ ACTUAL
+;; CANVI v3: dir-idx ve de la memòria (pot rotar si stuck), no és fix
 ;; ======================================================================
 
 (defun agent-xyz999-dir-vec (idx)
-  "8 direccions cardinales/diagonals amb magnitud ~25.
-   (18 ≈ 25/sqrt(2) per a diagonals)"
+  "8 direccions cardinales/diagonals amb magnitud ~25."
   (cond ((= idx 0) '(25  0))
         ((= idx 1) '(18  18))
         ((= idx 2) '(0   25))
@@ -234,25 +267,20 @@
                     (agent-xyz999-closest-lab (cdr labs) coord (car labs) dist))
                    (t (agent-xyz999-closest-lab (cdr labs) coord best-lab best-dist)))))))
 
-(defun agent-xyz999-desti-bolla (id coord mem ronda)
-  "Destí basat en POSICIÓ ACTUAL + vector per a l'exploració.
-   Això evita el problema de coordenades absolutes desconegudes."
+(defun agent-xyz999-desti-bolla (id coord mem ronda dir-idx)
+  "Destí basat en POSICIÓ ACTUAL + vector.
+   dir-idx ve de la memòria i pot haver estat rotat si l'agent estava stuck."
   (let* ((base-enemy (agent-xyz999-get 'base-enemy mem))
          (base-ally  (agent-xyz999-get 'base-ally mem))
          (labs       (agent-xyz999-get 'labs mem))
          (abs-id     (agent-xyz999-abs id))
 
-         ;; Direcció fixa per unitat: 8 agents → 8 direccions, cap ramada
-         (dir-idx  (rem abs-id 8))
+         ;; Direcció actual (pot haver rotat per stuck)
          (d        (agent-xyz999-dir-vec dir-idx))
-
-         ;; Destí d'exploració = posició ACTUAL + vector
-         ;; Cada vegada que es mou, el destí avança en la mateixa direcció
          (dest-exp (list (+ (car coord)  (car d))
                          (+ (cadr coord) (cadr d))))
 
-         ;; Patrulla defensiva: orbitar la base aliada
-         ;; Si tenim base-ally, posar destí a ~8 unitats en una direcció rotant
+         ;; Patrulla defensiva
          (dirs-pat '((8 0) (6 6) (0 8) (-6 6) (-8 0) (-6 -6) (0 -8) (6 -6)))
          (d-pat    (agent-xyz999-nth (rem (agent-xyz999-abs ronda) 8) dirs-pat))
          (dest-pat (cond (base-ally
@@ -260,49 +288,38 @@
                                 (+ (cadr base-ally) (cadr d-pat))))
                          (t dest-exp)))
 
-         ;; Rol: 0,1 mod 3 → atacant; 2 mod 3 → explorador/defensor
-         (rol (rem abs-id 3))
+         (rol         (rem abs-id 3))
          (is-attacker (< rol 2))
          (is-defender (= (rem abs-id 6) 5)))
 
     (cond
-      ;; Prioritat 1: si hi ha labs enemics visibles/recordats → captura'ls
       ((and labs (> (agent-xyz999-longitud labs) 0))
        (agent-xyz999-closest-lab labs coord nil 100000))
-
-      ;; Prioritat 2: atacants → base enemiga (si la coneixem)
       ((and is-attacker base-enemy)
        base-enemy)
-
-      ;; Prioritat 3: defensor → patrullar la base aliada
       (is-defender dest-pat)
-
-      ;; Prioritat 4: explorar en la pròpia direcció des de la posició actual
       (t dest-exp))))
 
 ;; ======================================================================
-;; DECISIONS UNITÀRIES (BASE / BOLLA)
+;; DECISIONS UNITÀRIES
 ;; ======================================================================
 
-(defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure vis mem id ronda)
+(defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure vis mem id ronda dir-idx)
+  "CANVI v3: rep dir-idx com a paràmetre (pot ser la direcció rotada)."
   (let* ((tp (cond (tr-pintar tr-pintar) (t 0)))
          (tm (cond (tr-moure tr-moure) (t 0)))
 
-         ;; Historial d'aquesta unitat
          (paths     (agent-xyz999-get 'unit-paths mem))
          (unit-path (agent-xyz999-get id paths))
 
-         ;; Aliats visibles (per penalitzar ramada)
          (allies (agent-xyz999-allies-vis vis equip))
 
-         ;; Tret
          (target-tret (cond ((< tp 1)
                              (agent-xyz999-millor-tret vis equip coord nil -1))
                             (t nil)))
          (tret (cond (target-tret (list 'pinta (list target-tret))) (t nil)))
 
-         ;; Moviment
-         (desti      (agent-xyz999-desti-bolla id coord mem ronda))
+         (desti      (agent-xyz999-desti-bolla id coord mem ronda dir-idx))
          (movs       (agent-xyz999-movibles vis coord))
          (target-mov (cond ((< tm 1)
                             (agent-xyz999-millor-mov movs desti unit-path allies nil 1000000))
@@ -320,8 +337,6 @@
               (colors (cond ((null utils) '(r g b)) (t utils)))
               (color  (agent-xyz999-nth (rem (agent-xyz999-abs ronda)
                                              (agent-xyz999-longitud colors)) colors))
-
-              ;; Spawn cap a la base enemiga si la coneixem
               (movs       (agent-xyz999-movibles vis coord))
               (base-enemy (agent-xyz999-get 'base-enemy mem))
               (desti (cond (base-enemy base-enemy)
@@ -347,20 +362,32 @@
          (vis         (nth 10 dades))
          (mem-old     (nth 11 dades))
 
-         ;; 1. Actualitzar memòria amb la visió actual
+         ;; 1. Actualitzar memòria amb la visió
          (mem-vis  (agent-xyz999-actualitza-mem vis mem-old equip))
 
-         ;; 2. Guardar nova posició a l'historial (només bolles)
-         (mem-nova (cond ((eq tipus 'bolla)
+         ;; 2. Guardar posició a l'historial (només bolles)
+         (mem-path (cond ((eq tipus 'bolla)
                           (agent-xyz999-update-unit-path id coord mem-vis))
                          (t mem-vis)))
 
-         ;; 3. Prendre decisió
+         ;; 3. CANVI v3: detectar bloqueig i rotar direcció si cal
+         ;;    Obtenim l'historial actualitzat d'aquesta unitat
+         (unit-path (let* ((paths (agent-xyz999-get 'unit-paths mem-path)))
+                      (cond (paths (agent-xyz999-get id paths)) (t nil))))
+         (stuck     (agent-xyz999-is-stuck unit-path))
+         (cur-dir   (agent-xyz999-get-dir id mem-path))
+         ;;    Si stuck, rotar +1 (fins a 7 rotacions possibles per sortir)
+         (new-dir   (cond (stuck (rem (+ cur-dir 1) 8)) (t cur-dir)))
+         ;;    Guardar nova direcció a memòria
+         (mem-nova  (cond (stuck (agent-xyz999-set-dir id new-dir mem-path))
+                          (t mem-path)))
+
+         ;; 4. Decisió
          (accions  (cond ((eq tipus 'base)
                           (agent-xyz999-decisio-base coord vis mem-nova pintura ronda id))
                          ((eq tipus 'bolla)
-                          (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure vis mem-nova id ronda))
+                          (agent-xyz999-decisio-bolla coord equip tr-pintar tr-moure
+                                                      vis mem-nova id ronda new-dir))
                          (t nil))))
 
-    ;; 4. Retornar escriptura de memòria i accions
     (append (list (list 'escriu-memoria (list mem-nova))) accions)))
