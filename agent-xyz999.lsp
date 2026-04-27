@@ -424,25 +424,24 @@
                 (cons c (agent-xyz999-movibles (cdr vis) coord)))
                (t (agent-xyz999-movibles (cdr vis) coord)))))))
 
-(defun agent-xyz999-prox-tabu (coord tabu-list best-d)
-  "Retorna la distància al quadrat a la posició tabú més propera."
-  (cond ((null tabu-list) best-d)
-        (t (let ((d (agent-xyz999-dist-q coord (car tabu-list))))
-             (cond ((< d best-d) (agent-xyz999-prox-tabu coord (cdr tabu-list) d))
-                   (t (agent-xyz999-prox-tabu coord (cdr tabu-list) best-d)))))))
+(defun agent-xyz999-es-tabu (coord tabu-list)
+  "Retorna cert si coord és exactament igual a alguna posició tabú."
+  (cond ((null tabu-list) nil)
+        ((equal coord (car tabu-list)) t)
+        (t (agent-xyz999-es-tabu coord (cdr tabu-list)))))
 
 (defun agent-xyz999-cost-mov (casella desti color-propi tabu-list)
   "Cost d'un moviment a casella dirigint-se cap a desti.
-   Cost = dist²(casella, desti)*10 + penalització color + soroll + TABU.
-   Afegeix +500 si la casella està a dist² < 9 d'una zona tabú (atasco previo)."
+   Cost = dist²(casella, desti)*10 + penalització color + TABU.
+   Sense soroll aleatori per permetre moviments rectes perfectes.
+   Afegeix +1000 si la casella és exactament una zona tabú (rastro de peste)."
   (let* ((coord (agent-xyz999-c-coord casella))
-         (d-tabu (agent-xyz999-prox-tabu coord tabu-list 1000000)))
+         (es-tabu (agent-xyz999-es-tabu coord tabu-list)))
     (cond ((or (null coord) (null desti)) 1000000)
           (t (+ (* (agent-xyz999-dist-q coord desti) 10)
                 (cond ((eq (agent-xyz999-c-color casella) color-propi) 0)
                       (t 5))
-                (random 20)
-                (cond ((< d-tabu 9) 500)
+                (cond (es-tabu 1000)
                       (t 0)))))))
 
 (defun agent-xyz999-millor-mov (movibles desti color-propi best-coord best-cost tabu-list)
@@ -539,9 +538,9 @@
          (m (agent-xyz999-millor-mov movs desti color-propi nil 1000000000 tabu-list)))
     (cond ((null m) mem)
           ((and (>= (agent-xyz999-dist-q m desti) (agent-xyz999-dist-q coord desti))
-                (>= (agent-xyz999-prox-tabu coord tabu-list 1000000) 9))
+                (not (agent-xyz999-es-tabu coord tabu-list)))
            (agent-xyz999-set 'tabu-list 
-             (agent-xyz999-afegir-coord coord tabu-list 30) mem))
+             (agent-xyz999-afegir-coord coord tabu-list 80) mem))
           (t mem))))
 
 (defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure
