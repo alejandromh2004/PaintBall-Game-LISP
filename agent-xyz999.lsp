@@ -359,15 +359,19 @@
          (agent-xyz999-set 'unit-phases nou-unit-phases mem)))
       (t mem))))
 
+(defun agent-xyz999-calcula-desti-flanqueig (base-enemy id)
+  "Calcula un destí de flanqueig al voltant de la base enemiga basat en l'id."
+  (let* ((vecs '((15 0) (10 10) (0 15) (-10 10) (-15 0) (-10 -10) (0 -15) (10 -10)))
+         (v    (agent-xyz999-nth-safe (rem (agent-xyz999-abs id) 8) vecs)))
+    (list (+ (car base-enemy) (car v)) (+ (cadr base-enemy) (cadr v)))))
+
 (defun agent-xyz999-desti-bolla (mem id coord color-propi)
   "Determina el destí de la bolla a partir de la memòria ja actualitzada.
    Prioritat:
      1. KILL-COLOR OVERRIDE: soc el color que destrueix la base → rush!
-     2. ROL 0 (atacant):   base-enemy si coneguda → waypoint actual.
-     3. ROL 1 (chassador): lab més proper → base-enemy → waypoint.
-     4. ROL 2 (explorador): base-enemy si coneguda → waypoint actual.
-   mem: a-list (ja amb fase avançada si calia en aquest torn).
-   id: enter. coord: (x y). color-propi: símbol ('r, 'g o 'b)."
+     2. ROL 0/2: Flanqueig de base enemiga si està lluny, atac directe si a prop.
+     3. ROL 1: lab més proper → base-enemy → waypoint.
+   mem: a-list. id: enter. coord: (x y). color-propi: símbol."
   (let* ((rol         (agent-xyz999-rol id))
          (base-enemy  (agent-xyz999-get 'base-enemy mem))
          (colors-be   (agent-xyz999-get 'colors-base-enemy mem))
@@ -380,23 +384,24 @@
          (es-kill     (and kc base-enemy (eq color-propi kc)))
          (wp          (agent-xyz999-waypoint-per-fase id fase base-ally)))
     (cond
-      ;; KILL-COLOR OVERRIDE: soc el color decisiu, rush immediat!
+      ;; KILL-COLOR OVERRIDE: rush immediat!
       (es-kill base-enemy)
 
-      ;; ROL 0 - ATACANT: directe a la base enemiga si la coneix
-      ((and (= rol 0) base-enemy) base-enemy)
+      ;; ROL 0/2: si coneixen la base enemiga, ataquen en formació de pinza (flanqueig)
+      ((and (or (= rol 0) (= rol 2)) base-enemy)
+       (cond ((< (agent-xyz999-dist-q coord base-enemy) 144) base-enemy) ; si dist < 12 caselles, atac directe
+             (t (agent-xyz999-calcula-desti-flanqueig base-enemy id))))
 
-      ;; ROL 1 - CHASSADOR: cap al lab més proper per acumular pintura
+      ;; ROL 1 - CHASSADOR: lab més proper
       ((and (= rol 1) (> n-labs 0))
        (agent-xyz999-lab-mes-proper labs coord nil 1000000))
 
-      ;; ROL 1 sense labs: s'uneix a l'atac si la base és coneguda
-      ((and (= rol 1) base-enemy) base-enemy)
+      ;; ROL 1 sense labs: s'uneix al flanqueig/atac
+      ((and (= rol 1) base-enemy)
+       (cond ((< (agent-xyz999-dist-q coord base-enemy) 144) base-enemy)
+             (t (agent-xyz999-calcula-desti-flanqueig base-enemy id))))
 
-      ;; ROL 2 - EXPLORADOR: ataca si base coneguda, si no explora
-      ((and (= rol 2) base-enemy) base-enemy)
-
-      ;; Fallback universal: waypoint actual per cobertura sistemàtica
+      ;; Fallback universal: waypoint actual
       (t wp))))
 
 
@@ -419,32 +424,38 @@
                 (cons c (agent-xyz999-movibles (cdr vis) coord)))
                (t (agent-xyz999-movibles (cdr vis) coord)))))))
 
-(defun agent-xyz999-cost-mov (casella desti color-propi)
+(defun agent-xyz999-prox-tabu (coord tabu-list best-d)
+  "Retorna la distància al quadrat a la posició tabú més propera."
+  (cond ((null tabu-list) best-d)
+        (t (let ((d (agent-xyz999-dist-q coord (car tabu-list))))
+             (cond ((< d best-d) (agent-xyz999-prox-tabu coord (cdr tabu-list) d))
+                   (t (agent-xyz999-prox-tabu coord (cdr tabu-list) best-d)))))))
+
+(defun agent-xyz999-cost-mov (casella desti color-propi tabu-list)
   "Cost d'un moviment a casella dirigint-se cap a desti.
-   Cost = dist²(casella, desti)*10 + penalització de color + soroll.
-   Penalitza +5 les caselles de color aliè. S'hi suma (random 20) per 
-   trencar oscil·lacions infinites quan hi ha parets d'aigua en forma de U.
-   casella: estructura casella. desti: (x y). color-propi: símbol."
-  (let ((coord (agent-xyz999-c-coord casella)))
+   Cost = dist²(casella, desti)*10 + penalització color + soroll + TABU.
+   Afegeix +500 si la casella està a dist² < 9 d'una zona tabú (atasco previo)."
+  (let* ((coord (agent-xyz999-c-coord casella))
+         (d-tabu (agent-xyz999-prox-tabu coord tabu-list 1000000)))
     (cond ((or (null coord) (null desti)) 1000000)
           (t (+ (* (agent-xyz999-dist-q coord desti) 10)
                 (cond ((eq (agent-xyz999-c-color casella) color-propi) 0)
                       (t 5))
-                (random 20))))))
+                (random 20)
+                (cond ((< d-tabu 9) 500)
+                      (t 0)))))))
 
-(defun agent-xyz999-millor-mov (movibles desti color-propi best-coord best-cost)
-  "Cerca greedy la casella de movibles amb menor cost cap a desti.
-   Recursió de cua sobre movibles.
-   Retorna la coord (x y) de la millor casella, o nil si no n'hi ha cap."
+(defun agent-xyz999-millor-mov (movibles desti color-propi best-coord best-cost tabu-list)
+  "Cerca greedy la casella de movibles amb menor cost cap a desti."
   (cond
     ((null movibles) best-coord)
-    (t (let ((cost (agent-xyz999-cost-mov (car movibles) desti color-propi)))
+    (t (let ((cost (agent-xyz999-cost-mov (car movibles) desti color-propi tabu-list)))
          (cond ((< cost best-cost)
                 (agent-xyz999-millor-mov (cdr movibles) desti color-propi
-                                         (agent-xyz999-c-coord (car movibles)) cost))
+                                         (agent-xyz999-c-coord (car movibles)) cost tabu-list))
                (t
                 (agent-xyz999-millor-mov (cdr movibles) desti color-propi
-                                         best-coord best-cost)))))))
+                                         best-coord best-cost tabu-list)))))))
 
 (defun agent-xyz999-fallback-mov (movibles)
   "Retorna la primera casella disponible com a fallback si està encallada."
@@ -520,6 +531,19 @@
 ;; SECCIÓ 9: DECISIÓ DE LA BOLLA
 ;; ======================================================================
 
+(defun agent-xyz999-detecta-atasco (coord vis color-propi mem id)
+  "Detecta si l'agent està en un mínim local. Si ho està, guarda la posició a tabu-list."
+  (let* ((desti (agent-xyz999-desti-bolla mem id coord color-propi))
+         (tabu-list (agent-xyz999-get 'tabu-list mem))
+         (movs (agent-xyz999-movibles vis coord))
+         (m (agent-xyz999-millor-mov movs desti color-propi nil 1000000000 tabu-list)))
+    (cond ((null m) mem)
+          ((and (>= (agent-xyz999-dist-q m desti) (agent-xyz999-dist-q coord desti))
+                (>= (agent-xyz999-prox-tabu coord tabu-list 1000000) 9))
+           (agent-xyz999-set 'tabu-list 
+             (agent-xyz999-afegir-coord coord tabu-list 30) mem))
+          (t mem))))
+
 (defun agent-xyz999-decisio-bolla (coord equip color-propi tr-pintar tr-moure
                                     vis mem id)
   "Cervell de la bolla: retorna la llista d'accions (tret i/o moviment).
@@ -531,6 +555,7 @@
   (let* ((tp         (cond (tr-pintar tr-pintar) (t 0)))
          (tm         (cond (tr-moure  tr-moure)  (t 0)))
          (base-ally  (agent-xyz999-get 'base-ally mem))
+         (tabu-list  (agent-xyz999-get 'tabu-list mem))
 
          ;; TRET: millor objectiu en rang ≤5u² si cooldown < 1
          (tret-coord (cond ((< tp 1)
@@ -546,7 +571,7 @@
                             (let* ((movs  (agent-xyz999-movibles vis coord))
                                    (m     (agent-xyz999-millor-mov movs desti
                                                                    color-propi
-                                                                   nil 1000000000))
+                                                                   nil 1000000000 tabu-list))
                                    (m-fin (cond (m m) (t (agent-xyz999-fallback-mov movs)))))
                               (cond (m-fin (list (list 'mou (list m-fin))))
                                     (t nil))))
@@ -569,6 +594,7 @@
     (t (let* ((colors-be  (agent-xyz999-get 'colors-base-enemy mem))
               (base-enemy (agent-xyz999-get 'base-enemy mem))
               (labs       (agent-xyz999-get 'labs mem))
+              (tabu-list  (agent-xyz999-get 'tabu-list mem))
               (color      (agent-xyz999-tria-color colors-be ronda))
 
               ;; Direcció de spawn: base-enemy > labs > 8 dirs rotatives
@@ -589,7 +615,7 @@
                                           (* (cadr d) 5)))))))
 
               (movs  (agent-xyz999-movibles vis coord))
-              (spawn (agent-xyz999-millor-mov movs desti-sp nil nil 1000000000)))
+              (spawn (agent-xyz999-millor-mov movs desti-sp nil nil 1000000000 tabu-list)))
          (cond
            ((and spawn color) (list (list 'crea-bolla (list color spawn))))
            (t nil))))))
@@ -632,11 +658,15 @@
                          (agent-xyz999-set 'base-ally coord mem-vis))
                         (t mem-vis)))
 
-         ;; Pas 3: les bolles avancen fase si han assolit el waypoint o timeout
-         (mem-final   (cond
+         ;; Pas 3: les bolles avancen fase i detecten atascos
+         (mem-fase    (cond
                         ((eq tipus 'bolla)
                          (agent-xyz999-avanca-fase-si-cal coord mem-base id ronda vis))
                         (t mem-base)))
+         (mem-final   (cond
+                        ((eq tipus 'bolla)
+                         (agent-xyz999-detecta-atasco coord vis color-propi mem-fase id))
+                        (t mem-fase)))
 
          ;; Pas 4: decideix accions amb la memòria completament actualitzada
          (accions     (cond
