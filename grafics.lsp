@@ -409,7 +409,7 @@
 ;; SECCIÓ 9 – FUNCIÓ PRINCIPAL
 ;; ======================================================================
 
-;; Dibuixa el mapa, les fletxes d'accions i el HUD
+;; Dibuixa el mapa i les fletxes d'accions
 (defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
     (let* ((files     (length mapa))
          (cols      (length (car mapa)))
