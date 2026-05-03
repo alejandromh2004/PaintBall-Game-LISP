@@ -180,7 +180,7 @@
                     (agent-jvs328-millor-tret (cdr vis) equip coord best-coord best-score)))))))
 
 ;; ======================================================================
-;; SECCIÓ 7 – ESTRATÈGIA ANTI-RAMADA (FLOCKING)
+;; SECCIÓ 7 – ESTRATÈGIA ANTI-RAMADA
 ;; ======================================================================
 
 ;; Recull fins a 6 aliats visibles per evitar col·lisions i aglomeracions
