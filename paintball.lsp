@@ -93,13 +93,13 @@
     ((= (compta-bases-mapa mapa 'e1) 0)
      (dibuixa-mapa mapa nil nil nil ronda 'e2 pint-e1 pint-e2)
      (goto-xy 0 1)
-     (format t "VICTORIA EQUIPO 2                  ")
+     (format t "VICTORIA EQUIP 2                  ")
      'fi-de-partida)
 
     ((= (compta-bases-mapa mapa 'e2) 0)
      (dibuixa-mapa mapa nil nil nil ronda 'e1 pint-e1 pint-e2)
      (goto-xy 0 1)
-     (format t "VICTORIA EQUIPO 1                  ")
+     (format t "VICTORIA EQUIP 1                  ")
      'fi-de-partida)
 
     ((> ronda 1500)
@@ -245,16 +245,16 @@
     (goto-xy 0 1)
     (cond 
       ((> bolles-e1 bolles-e2) 
-       (format t "VICTORIA EQUIPO 1 (DESEMPAT: ~A vs ~A bolles)          " bolles-e1 bolles-e2))
+       (format t "VICTORIA EQUIP 1 (DESEMPAT: ~A vs ~A bolles)          " bolles-e1 bolles-e2))
       ((> bolles-e2 bolles-e1) 
-       (format t "VICTORIA EQUIPO 2 (DESEMPAT: ~A vs ~A bolles)          " bolles-e2 bolles-e1))
+       (format t "VICTORIA EQUIP 2 (DESEMPAT: ~A vs ~A bolles)          " bolles-e2 bolles-e1))
       ((> pint-e1 pint-e2) 
-       (format t "VICTORIA EQUIPO 1 (DESEMPAT: ~A vs ~A pintura)         " pint-e1 pint-e2))
+       (format t "VICTORIA EQUIP 1 (DESEMPAT: ~A vs ~A pintura)         " pint-e1 pint-e2))
       ((> pint-e2 pint-e1) 
-       (format t "VICTORIA EQUIPO 2 (DESEMPAT: ~A vs ~A pintura)         " pint-e2 pint-e1))
+       (format t "VICTORIA EQUIP 2 (DESEMPAT: ~A vs ~A pintura)         " pint-e2 pint-e1))
       (t 
        (let ((guanyador (nth (random 2) '(1 2))))
-         (format t "VICTORIA EQUIPO ~A (DESEMPAT: SORT)                  " guanyador))))))
+         (format t "VICTORIA EQUIP ~A (DESEMPAT: SORT)                  " guanyador))))))
 
 
 
