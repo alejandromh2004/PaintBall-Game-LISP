@@ -3,55 +3,68 @@
 ;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego.
 ;; Professor: Miquel Cabot.
 ;; Lliurament: primera convocatòria.
-;; Agent intel·ligent del programa equip 1.
+;; Agent intel·ligent del programa equip 1 (Negre).
 
+;; ======================================================================
+;; SECCIÓ 1 – FUNCIONS AUXILIARS DE L'AGENT
+;; ======================================================================
+
+;; Retorna el valor absolut d'un nombre
 (defun agent-xyz999-abs (n)
   (cond ((null n) 0) ((< n 0) (- n)) (t n)))
 
+;; Calcula la distància euclidiana al quadrat entre dues coordenades
 (defun agent-xyz999-dist-q (c1 c2)
   (cond ((or (null c1) (null c2)) 100000)
         (t (+ (* (- (car c1) (car c2)) (- (car c1) (car c2)))
               (* (- (cadr c1) (cadr c2)) (- (cadr c1) (cadr c2)))))))
 
+;; Retorna la longitud d'una llista
 (defun agent-xyz999-longitud (lst)
   (cond ((null lst) 0)
         (t (+ 1 (agent-xyz999-longitud (cdr lst))))))
 
+;; Retorna l'element n-èssim d'una llista
 (defun agent-xyz999-nth (n lst)
   (cond ((null lst) nil)
         ((= n 0) (car lst))
         (t (agent-xyz999-nth (- n 1) (cdr lst)))))
 
+;; Comprova si un element pertany a una llista
 (defun agent-xyz999-membre (elem lst)
   (cond ((null lst) nil)
         ((equal (car lst) elem) t)
         (t (agent-xyz999-membre elem (cdr lst)))))
 
+;; Elimina totes les aparicions d'un element en una llista
 (defun agent-xyz999-elimina (elem lst)
   (cond ((null lst) nil)
         ((equal (car lst) elem) (agent-xyz999-elimina elem (cdr lst)))
         (t (cons (car lst) (agent-xyz999-elimina elem (cdr lst))))))
 
+;; Retorna els primers n elements d'una llista
 (defun agent-xyz999-take (n lst)
   (cond ((or (<= n 0) (null lst)) nil)
         (t (cons (car lst) (agent-xyz999-take (- n 1) (cdr lst))))))
 
 ;; ======================================================================
-;; MEMÒRIA COMPARTIDA (A-LIST)
+;; SECCIÓ 2 – GESTIÓ DE LA MEMÒRIA COMPARTIDA
 ;; ======================================================================
 
+;; Obté el valor associat a una clau en l'A-list de memòria
 (defun agent-xyz999-get (clau mem)
   (cond ((null mem) nil)
         ((eq (caar mem) clau) (cdar mem))
         (t (agent-xyz999-get clau (cdr mem)))))
 
+;; Estableix o actualitza un valor en l'A-list de memòria
 (defun agent-xyz999-set (clau val mem)
   (cond ((null mem) (list (cons clau val)))
         ((eq (caar mem) clau) (cons (cons clau val) (cdr mem)))
         (t (cons (car mem) (agent-xyz999-set clau val (cdr mem))))))
 
+;; Actualitza l'historial de posicions (màxim 6) per a la detecció de bloquejos
 (defun agent-xyz999-update-unit-path (id coord mem)
-  "Afegeix coord a l'historial de la unitat (màxim 6 posicions)."
   (let* ((paths    (agent-xyz999-get 'unit-paths mem))
          (path-act (agent-xyz999-get id paths))
          (nou-path (agent-xyz999-take 6 (cons coord path-act)))
@@ -59,12 +72,11 @@
     (agent-xyz999-set 'unit-paths nous-paths mem)))
 
 ;; ======================================================================
-;; DETECCIÓ DE BLOQUEIG I GESTIÓ DE DIRECCIONS
+;; SECCIÓ 3 – DETECCIÓ DE BLOQUEIG I GESTIÓ DE DIRECCIONS
 ;; ======================================================================
 
+;; Determina si l'agent està atrapat o "rebotant" en una zona petita
 (defun agent-xyz999-is-stuck (unit-path)
-  "Retorna t si les últimes 4 posicions estan totes dins dist²<10 entre si.
-   Indica que l'agent porta rodes girant al mateix lloc (dead-end o ramada)."
   (cond ((< (agent-xyz999-longitud unit-path) 4) nil)
         (t (let* ((p0 (car unit-path))
                   (p1 (agent-xyz999-nth 1 unit-path))
@@ -75,35 +87,36 @@
                            (< (agent-xyz999-dist-q p0 p2) 10)
                            (< (agent-xyz999-dist-q p0 p3) 10))))))))
 
+;; Recupera la direcció d'exploració preferida per a una unitat
 (defun agent-xyz999-get-dir (id mem)
-  "Obté la direcció actual d'una unitat (default: abs-id mod 8)."
   (let* ((dirs (agent-xyz999-get 'unit-dirs mem))
          (d    (cond (dirs (agent-xyz999-get id dirs)) (t nil))))
     (cond ((null d) (rem (agent-xyz999-abs id) 8))
           (t d))))
 
+;; Desa la direcció actualitzada de la unitat
 (defun agent-xyz999-set-dir (id dir mem)
-  "Desa la nova direcció d'una unitat a la memòria."
   (let* ((dirs     (agent-xyz999-get 'unit-dirs mem))
          (safe-dirs (cond (dirs dirs) (t nil)))
          (new-dirs (agent-xyz999-set id dir safe-dirs)))
     (agent-xyz999-set 'unit-dirs new-dirs mem)))
 
 ;; ======================================================================
-;; ACCESSORS PER A LA VISIÓ
+;; SECCIÓ 4 – ACCESSORS PER A LA VISIÓ
 ;; ======================================================================
 
-(defun agent-xyz999-c-coord  (c) (nth 0 c))
-(defun agent-xyz999-c-tipus  (c) (nth 1 c))
-(defun agent-xyz999-c-color  (c) (nth 2 c))
-(defun agent-xyz999-c-elem   (c) (nth 3 c))
-(defun agent-xyz999-c-equip  (c) (nth 4 c))
-(defun agent-xyz999-c-colors (c) (nth 5 c))
+(defun agent-xyz999-c-coord  (c) (nth 0 c)) ;; Coordenada (x y)
+(defun agent-xyz999-c-tipus  (c) (nth 1 c)) ;; Tipus (terra/aigua)
+(defun agent-xyz999-c-color  (c) (nth 2 c)) ;; Color de la casella
+(defun agent-xyz999-c-elem   (c) (nth 3 c)) ;; Element (base/bolla/lab)
+(defun agent-xyz999-c-equip  (c) (nth 4 c)) ;; Equip propietari
+(defun agent-xyz999-c-colors (c) (nth 5 c)) ;; Llista de colors de pintura
 
 ;; ======================================================================
-;; ACTUALITZACIÓ DE LA MEMÒRIA (VISIÓ)
+;; SECCIÓ 5 – ACTUALITZACIÓ DE LA MEMÒRIA (VISIÓ)
 ;; ======================================================================
 
+;; Sincronitza el coneixement compartit basat en el que veu la unitat actual
 (defun agent-xyz999-actualitza-mem (vis mem equip)
   (cond
     ((null vis) mem)
@@ -113,6 +126,7 @@
               (eq-c   (agent-xyz999-c-equip c))
               (colors (agent-xyz999-c-colors c))
 
+              ;; Localització de bases
               (m1 (cond ((and (eq elem 'base) (not (eq eq-c equip)))
                          (agent-xyz999-set 'colors-base-enemy colors
                            (agent-xyz999-set 'base-enemy coord mem)))
@@ -120,8 +134,8 @@
                          (agent-xyz999-set 'base-ally coord mem))
                         (t mem)))
 
+              ;; Manteniment de la llista de laboratoris (limitat a 15 per eficiència)
               (labs (agent-xyz999-get 'labs m1))
-              ;; CANVI v3: labs limitat a 15 entrades per evitar creixement O(n)
               (m2 (cond ((and (eq elem 'lab) (not (eq eq-c equip)))
                          (cond ((not (agent-xyz999-membre coord labs))
                                 (agent-xyz999-set 'labs
@@ -133,19 +147,17 @@
        (agent-xyz999-actualitza-mem (cdr vis) m2 equip)))))
 
 ;; ======================================================================
-;; LÒGICA DE COLORS
+;; SECCIÓ 6 – LÒGICA DE TRET I COLORS
 ;; ======================================================================
 
+;; Retorna els colors necessaris per completar la combinació RGB en un objectiu
 (defun agent-xyz999-filtra-colors (tots pintats)
   (cond ((null tots) nil)
         ((agent-xyz999-membre (car tots) pintats)
          (agent-xyz999-filtra-colors (cdr tots) pintats))
         (t (cons (car tots) (agent-xyz999-filtra-colors (cdr tots) pintats)))))
 
-;; ======================================================================
-;; LÒGICA DE TRET
-;; ======================================================================
-
+;; Puntua objectius: base enemiga > bolles enemigues > laboratoris
 (defun agent-xyz999-puntua-tret (c equip coord)
   (let* ((elem (agent-xyz999-c-elem c))
          (eq-c (agent-xyz999-c-equip c))
@@ -157,6 +169,7 @@
           ((eq elem 'lab) 100)
           (t -1))))
 
+;; Cerca la millor opció de tret dins el rang de visió
 (defun agent-xyz999-millor-tret (vis equip coord best-coord best-score)
   (cond ((null vis) best-coord)
         (t (let* ((c     (car vis))
@@ -167,12 +180,11 @@
                     (agent-xyz999-millor-tret (cdr vis) equip coord best-coord best-score)))))))
 
 ;; ======================================================================
-;; ANTI-RAMADA: detectar aliats a la visió
-;; CANVI v3: limitem a 6 aliats per evitar cost O(n²) amb molts agents
+;; SECCIÓ 7 – ESTRATÈGIA ANTI-RAMADA (FLOCKING)
 ;; ======================================================================
 
+;; Recull fins a 6 aliats visibles per evitar col·lisions i aglomeracions
 (defun agent-xyz999-allies-vis-acc (vis equip n)
-  "Recull fins a n aliats (bolles) visibles. Limit per eficiència."
   (cond ((or (null vis) (<= n 0)) nil)
         (t (let* ((c    (car vis))
                   (elem (agent-xyz999-c-elem c))
@@ -185,6 +197,7 @@
 (defun agent-xyz999-allies-vis (vis equip)
   (agent-xyz999-allies-vis-acc vis equip 6))
 
+;; Aplica penalitzacions de cost segons la proximitat a altres aliats
 (defun agent-xyz999-penalty-ramada (co allies)
   (cond ((null allies) 0)
         (t (let ((dist (agent-xyz999-dist-q co (car allies))))
@@ -196,9 +209,10 @@
                 (agent-xyz999-penalty-ramada co (cdr allies)))))))
 
 ;; ======================================================================
-;; TABU GRADUAT
+;; SECCIÓ 8 – NAVEGACIÓ I COST DE MOVIMENT
 ;; ======================================================================
 
+;; Penalització graduada per a les darreres posicions visitades
 (defun agent-xyz999-tabu-penalty (co unit-path idx)
   (cond ((null unit-path) 0)
         ((equal co (car unit-path))
@@ -209,10 +223,7 @@
                (t 10)))
         (t (agent-xyz999-tabu-penalty co (cdr unit-path) (+ idx 1)))))
 
-;; ======================================================================
-;; NAVEGACIÓ: MOVIBLES I COST
-;; ======================================================================
-
+;; Llista de caselles lliures adjacents
 (defun agent-xyz999-movibles (vis coord)
   (cond ((null vis) nil)
         (t (let* ((c  (car vis))
@@ -224,12 +235,14 @@
                     (cons co (agent-xyz999-movibles (cdr vis) coord)))
                    (t (agent-xyz999-movibles (cdr vis) coord)))))))
 
+;; Calcula el cost total d'un moviment (distància + tabú + ramada)
 (defun agent-xyz999-cost-mov (co desti unit-path allies)
   (let* ((dist   (agent-xyz999-dist-q co desti))
          (tabu   (agent-xyz999-tabu-penalty co unit-path 0))
          (ramada (agent-xyz999-penalty-ramada co allies)))
     (+ dist tabu ramada)))
 
+;; Selecciona la casella amb menor cost per apropar-se a l'objectiu
 (defun agent-xyz999-millor-mov (movibles desti unit-path allies best-coord best-cost)
   (cond ((null movibles) best-coord)
         (t (let* ((co   (car movibles))
@@ -240,12 +253,11 @@
                     (agent-xyz999-millor-mov (cdr movibles) desti unit-path allies best-coord best-cost)))))))
 
 ;; ======================================================================
-;; DESTINS: BASATS EN POSICIÓ ACTUAL
-;; CANVI v3: dir-idx ve de la memòria (pot rotar si stuck), no és fix
+;; SECCIÓ 9 – ESTRATÈGIA DE DESTINACIONS I ROLS
 ;; ======================================================================
 
+;; Direccions d'exploració de gran abast
 (defun agent-xyz999-dir-vec (idx)
-  "8 direccions cardinales/diagonals amb magnitud ~25."
   (cond ((= idx 0) '(25  0))
         ((= idx 1) '(18  18))
         ((= idx 2) '(0   25))
@@ -256,6 +268,7 @@
         ((= idx 7) '(18  -18))
         (t         '(25  0))))
 
+;; Cerca el laboratori conegut més proper
 (defun agent-xyz999-closest-lab (labs coord best-lab best-dist)
   (cond ((null labs) best-lab)
         (t (let ((dist (agent-xyz999-dist-q (car labs) coord)))
@@ -263,20 +276,19 @@
                     (agent-xyz999-closest-lab (cdr labs) coord (car labs) dist))
                    (t (agent-xyz999-closest-lab (cdr labs) coord best-lab best-dist)))))))
 
+;; Calcula el punt destí segons l'estat del joc i el rol de la unitat
 (defun agent-xyz999-desti-bolla (id coord mem ronda dir-idx)
-  "Destí basat en POSICIÓ ACTUAL + vector.
-   dir-idx ve de la memòria i pot haver estat rotat si l'agent estava stuck."
   (let* ((base-enemy (agent-xyz999-get 'base-enemy mem))
          (base-ally  (agent-xyz999-get 'base-ally mem))
          (labs       (agent-xyz999-get 'labs mem))
          (abs-id     (agent-xyz999-abs id))
 
-         ;; Direcció actual (pot haver rotat per stuck)
+         ;; Direcció base per a l'exploració
          (d        (agent-xyz999-dir-vec dir-idx))
          (dest-exp (list (+ (car coord)  (car d))
                          (+ (cadr coord) (cadr d))))
 
-         ;; Patrulla defensiva
+         ;; Patrulla de seguretat al voltant de la base pròpia
          (dirs-pat '((8 0) (6 6) (0 8) (-6 6) (-8 0) (-6 -6) (0 -8) (6 -6)))
          (d-pat    (agent-xyz999-nth (rem (agent-xyz999-abs ronda) 8) dirs-pat))
          (dest-pat (cond (base-ally
@@ -289,37 +301,41 @@
          (is-defender (= (rem abs-id 6) 5)))
 
     (cond
+      ;; 1. Captura de laboratoris (prioritat per a l'economia)
       ((and labs (> (agent-xyz999-longitud labs) 0))
        (agent-xyz999-closest-lab labs coord nil 100000))
+      ;; 2. Atac directe a la base enemiga
       ((and is-attacker base-enemy)
        base-enemy)
+      ;; 3. Mantenir posició defensiva
       (is-defender dest-pat)
+      ;; 4. Continuar l'exploració del mapa
       (t dest-exp))))
 
 ;; ======================================================================
-;; DECISIONS UNITÀRIES
+;; SECCIÓ 10 – GESTOR DE COMPORTAMENT (BASE I BOLLA)
 ;; ======================================================================
 
 (defun agent-xyz999-decisio-bolla (coord equip tr-pintar tr-moure vis mem id ronda dir-idx)
-  "CANVI v3: rep dir-idx com a paràmetre (pot ser la direcció rotada)."
   (let* ((tp (cond (tr-pintar tr-pintar) (t 0)))
          (tm (cond (tr-moure tr-moure) (t 0)))
 
          (paths     (agent-xyz999-get 'unit-paths mem))
          (unit-path (agent-xyz999-get id paths))
-
          (allies (agent-xyz999-allies-vis vis equip))
 
+         ;; Acció de tret
          (target-tret (cond ((< tp 1)
                              (agent-xyz999-millor-tret vis equip coord nil -1))
                             (t nil)))
          (tret (cond (target-tret (list 'pinta (list target-tret))) (t nil)))
 
+         ;; Acció de moviment
          (desti      (agent-xyz999-desti-bolla id coord mem ronda dir-idx))
          (movs       (agent-xyz999-movibles vis coord))
          (target-mov (cond ((< tm 1)
-                            (agent-xyz999-millor-mov movs desti unit-path allies nil 1000000))
-                           (t nil)))
+                             (agent-xyz999-millor-mov movs desti unit-path allies nil 1000000))
+                            (t nil)))
          (mou (cond (target-mov (list 'mou (list target-mov))) (t nil))))
 
     (append (cond (tret (list tret)) (t nil))
@@ -343,7 +359,7 @@
                (t nil))))))
 
 ;; ======================================================================
-;; PUNT D'ENTRADA DE L'AGENT
+;; SECCIÓ 11 – PUNT D'ENTRADA DE L'AGENT
 ;; ======================================================================
 
 (defun agent-xyz999 (dades)
@@ -358,27 +374,24 @@
          (vis         (nth 10 dades))
          (mem-old     (nth 11 dades))
 
-         ;; 1. Actualitzar memòria amb la visió
+         ;; 1. Integració de la nova visió a la memòria de l'equip
          (mem-vis  (agent-xyz999-actualitza-mem vis mem-old equip))
 
-         ;; 2. Guardar posició a l'historial (només bolles)
+         ;; 2. Actualització del rastre de moviment
          (mem-path (cond ((eq tipus 'bolla)
                           (agent-xyz999-update-unit-path id coord mem-vis))
                          (t mem-vis)))
 
-         ;; 3. CANVI v3: detectar bloqueig i rotar direcció si cal
-         ;;    Obtenim l'historial actualitzat d'aquesta unitat
+         ;; 3. Detecció de bloquejos i recalibratge de la direcció
          (unit-path (let* ((paths (agent-xyz999-get 'unit-paths mem-path)))
                       (cond (paths (agent-xyz999-get id paths)) (t nil))))
          (stuck     (agent-xyz999-is-stuck unit-path))
          (cur-dir   (agent-xyz999-get-dir id mem-path))
-         ;;    Si stuck, rotar +1 (fins a 7 rotacions possibles per sortir)
          (new-dir   (cond (stuck (rem (+ cur-dir 1) 8)) (t cur-dir)))
-         ;;    Guardar nova direcció a memòria
          (mem-nova  (cond (stuck (agent-xyz999-set-dir id new-dir mem-path))
                           (t mem-path)))
 
-         ;; 4. Decisió
+         ;; 4. Determinació de les millors accions a realitzar
          (accions  (cond ((eq tipus 'base)
                           (agent-xyz999-decisio-base coord vis mem-nova pintura ronda id))
                          ((eq tipus 'bolla)
@@ -386,4 +399,5 @@
                                                       vis mem-nova id ronda new-dir))
                          (t nil))))
 
+    ;; 5. Retorn de la nova memòria i el conjunt d'accions
     (append (list (list 'escriu-memoria (list mem-nova))) accions)))
