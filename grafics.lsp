@@ -324,69 +324,56 @@
 
 
 ;; ======================================================================
-;; SECCIÓ 7 – RECORREGUT DEL MAPA
+;; SECCIÓ 7 – RECORREGUT DEL MAPA (PINTAT PARCIAL OPTIMITZAT)
 ;; ======================================================================
 
-;; Dibuixa totes les caselles d'una fila del mapa.
-;; Paràmetres:
-;;   fila      - llista de caselles d'una fila
-;;   col       - índex de columna actual (comença a 0)
-;;   fila-idx  - índex de fila actual
-;;   m         - mida de casella en píxels
-;;   offset-y  - desplaçament vertical (per reservar espai per la consola)
-(defun gr-dibuixa-columnes (fila col y-visual m offset-x offset-y)
+(defun gr-dibuixa-columnes (fila fila-ant col y-visual m offset-x offset-y)
   (cond ((null fila) nil)
         (t
-         (gr-dibuixa-casella (car fila)
-                             (+ offset-x (* col m))
-                             (+ offset-y (* y-visual m))
-                             m)
-         (gr-dibuixa-columnes (cdr fila) (+ col 1) y-visual m offset-x offset-y))))
+         ;; Només dibuixa si la casella actual és diferent de la del torn passat
+         (cond ((not (equal (car fila) (cond (fila-ant (car fila-ant)) (t nil))))
+                (gr-dibuixa-casella (car fila) (+ offset-x (* col m)) (+ offset-y (* y-visual m)) m)))
+         (gr-dibuixa-columnes (cdr fila) (cond (fila-ant (cdr fila-ant)) (t nil)) (+ col 1) y-visual m offset-x offset-y))))
 
-;; Dibuixa totes les files del mapa.
-;; Paràmetres:
-;;   mapa     - llista de files del mapa
-;;   fila-idx - índex de fila actual (comença a 0)
-;;   m        - mida de casella en píxels
-;;   offset-y - desplaçament vertical
-(defun gr-dibuixa-files (mapa fila-idx m offset-x offset-y files)
+(defun gr-dibuixa-files (mapa mapa-ant fila-idx m offset-x offset-y files)
   (cond ((null mapa) nil)
         (t
-         ;; Dibuixem la fila 'fila-idx' a la posició vertical invertida
-         (gr-dibuixa-columnes (car mapa) 0 (- files 1 fila-idx) m offset-x offset-y)
-         (gr-dibuixa-files (cdr mapa) (+ fila-idx 1) m offset-x offset-y files))))
+         (gr-dibuixa-columnes (car mapa) (cond (mapa-ant (car mapa-ant)) (t nil)) 0 (- files 1 fila-idx) m offset-x offset-y)
+         (gr-dibuixa-files (cdr mapa) (cond (mapa-ant (cdr mapa-ant)) (t nil)) (+ fila-idx 1) m offset-x offset-y files))))
 
 
 ;; ======================================================================
-;; SECCIÓ 8 – FLETXES D'ACCIONS
+;; SECCIÓ 8 – FLETXES I NETEJA
 ;; ======================================================================
 
-;; Dibuixa una fletxa des del centre de la casella (x1,y1) fins a (x2,y2).
-;; Paràmetres:
-;;   x1, y1   - casella d'origen (col, row)
-;;   x2, y2   - casella de destinació (col, row)
-;;   m        - mida de casella en píxels
-;;   offset-y - desplaçament vertical del mapa
+(defun gr-redibuixa-area (x y max-x max-y mapa m offset-x offset-y files curr-x)
+  "Neteja l'àrea d'una fletxa vella redibuixant només aquest tros de mapa."
+  (cond ((> y max-y) nil)
+        ((> curr-x max-x) (gr-redibuixa-area x (+ y 1) max-x max-y mapa m offset-x offset-y files x))
+        (t (let ((casella (indexa-matriu mapa y curr-x)))
+             (cond (casella (gr-dibuixa-casella casella (+ offset-x (* curr-x m)) (+ offset-y (* (- files 1 y) m)) m)))
+             (gr-redibuixa-area x y max-x max-y mapa m offset-x offset-y files (+ curr-x 1))))))
+
+(defun gr-esborra-fletxes (fletxes mapa m offset-x offset-y files)
+  (cond ((null fletxes) nil)
+        (t (let* ((orig (cadr (car fletxes)))
+                  (desti (caddr (car fletxes)))
+                  (x1 (min (car orig) (car desti)))
+                  (x2 (max (car orig) (car desti)))
+                  (y1 (min (cadr orig) (cadr desti)))
+                  (y2 (max (cadr orig) (cadr desti))))
+             (gr-redibuixa-area x1 y1 x2 y2 mapa m offset-x offset-y files x1))
+           (gr-esborra-fletxes (cdr fletxes) mapa m offset-x offset-y files))))
+
 (defun gr-dibuixa-fletxa (x1 y1 x2 y2 m offset-x offset-y files)
   (let* ((hm  (round (/ m 2)))
-         ;; Centres de les dues caselles en coordenades de pantalla (Y INVERTIDA)
          (px1 (+ offset-x (* x1 m) hm))
          (py1 (+ offset-y (* (- files 1 y1) m) hm))
          (px2 (+ offset-x (* x2 m) hm))
-         (py2 (+ offset-y (* (- files 1 y2) m) hm))
-         ;; Vector de la fletxa
-         (ddx (- px2 px1))
-         (ddy (- py2 py1)))
-    ;; Eix de la fletxa
+         (py2 (+ offset-y (* (- files 1 y2) m) hm)))
     (gr-linia px1 py1 px2 py2)
-    ;; Punta de la fletxa: petit quadrat ple al destí
     (gr-fill (- px2 2) (- py2 2) 4 4)))
 
-;; Dibuixa totes les fletxes de la llista.
-;; Paràmetres:
-;;   fletxes  - llista de (tipus coord-orig coord-dest)
-;;   m        - mida de casella en píxels
-;;   offset-y - desplaçament vertical del mapa
 (defun gr-dibuixa-fletxes (fletxes m offset-x offset-y files)
   (cond ((null fletxes) nil)
         (t
@@ -398,45 +385,42 @@
                 (y1     (cadr orig))
                 (x2     (car desti))
                 (y2     (cadr desti)))
-            ;; Color de la fletxa: taronja per moviment, vermell per atac
             (cond ((eq tipus 'mou)   (color 230 115 20))
                   ((eq tipus 'pinta) (color 220 40  40))
-                  (t                 (gr-color-gris)))
+                  (t                 (color 128 128 128)))
             (gr-dibuixa-fletxa x1 y1 x2 y2 m offset-x offset-y files)
             (gr-dibuixa-fletxes (cdr fletxes) m offset-x offset-y files)))))
 
+
 ;; ======================================================================
-;; SECCIÓ 9 – FUNCIÓ PRINCIPAL
+;; SECCIÓ 9 – FUNCIÓ PRINCIPAL DE DIBUIX
 ;; ======================================================================
 
-;; Dibuixa el mapa i les fletxes d'accions
-(defun dibuixa-mapa (mapa ronda equip-actiu pint-e1 pint-e2 fletxes)
-    (let* ((files     (length mapa))
+(defun dibuixa-mapa (mapa mapa-ant fletxes-pantalla fletxes-noves ronda equip-actiu pint-e1 pint-e2)
+  (let* ((files     (length mapa))
          (cols      (length (car mapa)))
-         ;; Reduïm l'espai de consola a dalt per guanyar espai per al mapa
-         (console-h 30)
-         ;; Zona disponible per al mapa
+         ;; 1. Reservem 40 píxels d'alçada per al HUD de text
+         (console-h 40) 
          (area-h    (- 400 console-h))
-         ;; Mida de casella: la mínima de les dues dimensions
          (m-files   (floor (/ area-h (max 1 files))))
          (m-cols    (floor (/ 640    (max 1 cols))))
          (m         (max 1 (min m-files m-cols)))
-         ;; Espai sobrant vertical
-         (extra-h   (- area-h (* files m)))
-         ;; Fixem el mapa a baix (sobre la base + 2px) perquè creixi cap amunt
-         (offset-y  2)
-         ;; Centratge horitzontal: repartim l'espai sobrant (extra-w)
          (extra-w   (- 640 (* cols m)))
-         (offset-x  (floor (/ extra-w 2)))) ; Mapa centrat horitzontalment
+         (offset-x  (floor (/ extra-w 2)))
+         ;; 2. Empenyem el mapa 40 píxels cap avall
+         (offset-y  0))
 
-    ;; Esborra tota la pantalla
-    (cls)
-    
-    ;; 1. Dibuixa el mapa
-    (gr-dibuixa-files mapa 0 m offset-x offset-y files)
+    ;; 1. Neteja TOTAL NOMÉS si és el primer torn (no hi ha mapa antic)
+    (cond ((null mapa-ant) 
+           (cls)
+           (gr-dibuixa-files mapa nil 0 m offset-x offset-y files))
+          (t
+           ;; 2. Esborra la brutícia de les fletxes del torn anterior
+           (cond (fletxes-pantalla
+                  (gr-esborra-fletxes fletxes-pantalla mapa m offset-x offset-y files)))
+           ;; 3. Dibuixa NOMÉS el que ha canviat
+           (gr-dibuixa-files mapa mapa-ant 0 m offset-x offset-y files)))
 
-    ;; 2. Dibuixa les fletxes d'accions damunt del mapa
-    (gr-dibuixa-fletxes fletxes m offset-x offset-y files)
-    
-    ;; 3. Restableix el color de la consola a negre
+    ;; 4. Dibuixa les fletxes noves
+    (gr-dibuixa-fletxes fletxes-noves m offset-x offset-y files)
     (BLACK)))

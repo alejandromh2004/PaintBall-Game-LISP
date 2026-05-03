@@ -78,16 +78,22 @@
     ;; Inicialitza el bucle de la partida
     (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil nil 0 nil))) ;; Valors inicials del bucle
 
-;; Bucle principal del joc amb fletxes, gestió de l'historial de rondes i gestió de la memòria.
+
+(defun limita-historia (lst n)
+  "Limita la mida de la llista per evitar desbordaments de memòria (Garbage Collector limit)."
+  (cond ((or (null lst) (<= n 0)) nil)
+        (t (cons (car lst) (limita-historia (cdr lst) (- n 1))))))
+
 (defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia futur skip-visual fletxes-prev)
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
-       (dibuixa-mapa mapa ronda
-                     (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
-                     pint-e1 pint-e2 fletxes-prev)))
+         (let ((mapa-ant (cond (historia (cadr (car historia))) (t nil)))
+               (fletxes-pantalla (cond (historia (nth 6 (car historia))) (t nil))))
+           (dibuixa-mapa mapa mapa-ant fletxes-pantalla fletxes-prev ronda
+                         (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
+                         pint-e1 pint-e2))))
 
   (cond 
-    ;; Comprova si l'equip 1 ha perdut (la base ha desaparegut)
     ((= (compta-bases-mapa mapa 'e1) 0)
      (format t "~%==================================================~%")
      (format t "    VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT    ~%")
@@ -95,7 +101,6 @@
      (format t "==================================================~%")
      'fi-de-partida)
 
-    ;; Comprova si l'equip 2 ha perdut (la base ha desaparegut)
     ((= (compta-bases-mapa mapa 'e2) 0)
      (format t "~%==================================================~%")
      (format t "    VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT    ~%")
@@ -103,67 +108,63 @@
      (format t "==================================================~%")
      'fi-de-partida)
 
-    ;; Comprova si s'ha arribat al límit de rondes
     ((> ronda 1500)
      (determina-guanyador-empat mapa pint-e1 pint-e2)
      'fi-de-partida)
         
     (t 
-      ;; Determinem si hem de mostrar el menú o processar automàticament
-      (let* ((cmd (cond 
-                    ((> skip-visual 0) 'f) ;; Si estem saltant, el comando és forward
-                    ;; Aquí mostram la consola
-                    (t (progn
-                        (format t "~%Ronda ~A/1500" ronda)
-                        (format t "~%E1: ~A" pint-e1)
-                        (format t "~%E2: ~A" pint-e2)
-                        (format t "~%---------------")
-                        (format t "~%Controls")
-                        (format t "~%Continuar: ENTER")
-                        (format t "~%Saltar: s")
-                        (format t "~%Enrere: b")
-                        (format t "~%Sortir: q")
-                        (format t "~%-----------------")
-                        (format t "~%Tecla: ")
-                        ;; Aquí llegim la tecla
-                        (let ((input (read-line)))
-                          (cond ((string-equal input "b") 'b)
-                                ((string-equal input "q") 'q)
-                                ((string-equal input "s") 's)
+     (let* ((cmd (cond 
+                   ((> skip-visual 0) 'f)
+                   (t (progn
+                        ;; TRUC DEFINITIU: Movem el cursor a dalt de tot a l'esquerra (columna 0, fila 0)
+                        (goto-xy 0 0)
+                        
+                        ;; Imprimim el HUD amb espais al final per esborrar qualsevol resta
+                        (format t "RONDA: ~A/1500 | E1: ~A | E2: ~A | ESPAI per avançar [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
+                        
+                        ;; Llegim la tecla sense generar salts de línia
+                        (let* ((tecla (get-key))
+                               (t-str (cond ((numberp tecla) (string (code-char tecla)))
+                                            ((characterp tecla) (string tecla))
+                                            ((stringp tecla) tecla)
+                                            (t ""))))
+                          (cond ((string-equal t-str "b") 'b)
+                                ((string-equal t-str "q") 'q)
+                                ((string-equal t-str "s") 's)
                                 (t 'f)))))))
-             ;; Calculem el skip per a la següent iteració
-             (proxim-skip (cond ((eq cmd 's) 
-                                 (format t "Quantes rondes vols saltar? ")
-                                 (let ((n (read))) (max 0 (- n 1)))) ;; Escogit saltar: n-1 rondes (no se processa la ronda actual)
-                                ((> skip-visual 0) (- skip-visual 1)) ;; Continuam saltant
-                                (t 0)))) ;; No hem saltat cap ronda
+            
+            ;; Aquest càlcul ara pertany correctament al mateix let*
+            (proxim-skip (cond ((eq cmd 's) 
+                                (format t "~%Quantes rondes vols saltar? ")
+                                (let ((n (read))) (max 0 (- n 1))))
+                               ((> skip-visual 0) (- skip-visual 1))
+                               (t 0))))
        
        (cond 
-         ;; Si es q, sortim del joc
          ((eq cmd 'q)
           (cls)
           (format t "~%[SISTEMA] Partida aturada per l'usuari.~%")
           'fi-de-partida)
 
-         ;; Si es b i hi ha historia, tornam a la ronda anterior
+         ;; S'afegeixen les fletxes actuals (fletxes-prev) a l'estat-actual
          ((and (eq cmd 'b) historia)
           (let ((estat-ant (car historia))
-                (estat-actual (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)))
+                (estat-actual (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 fletxes-prev)))
             (bucle-partida (car estat-ant) 
                            (cadr estat-ant) 
                            (caddr estat-ant) 
                            (nth 3 estat-ant) 
                            (nth 4 estat-ant) 
                            (nth 5 estat-ant) 
-                           dx dy (cdr historia) (cons estat-actual futur) 0 nil)))
+                           dx dy (cdr historia) (cons estat-actual futur) 0 
+                           (nth 6 estat-ant))))
          
-         ;; Si es forward (f) i hi ha futur, anarem endavant
          (t 
           (cond
             ((and (eq cmd 'f) futur (<= skip-visual 0))
-             (let ((estat-seg (car futur)) ;; Següent estat (no es processa, tan sols se recupera)
-                   (estat-act (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2)))
-               (bucle-partida (car estat-seg) ;; Següent ronda (ja processada)
+             (let ((estat-seg (car futur))
+                   (estat-act (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 fletxes-prev)))
+               (bucle-partida (car estat-seg) 
                               (cadr estat-seg) 
                               (caddr estat-seg) 
                               (nth 3 estat-seg) 
@@ -172,27 +173,27 @@
                               dx dy 
                               (cons estat-act historia) 
                               (cdr futur) 
-                              0 nil)))
+                              0 
+                              (nth 6 estat-seg))))
             
-            ;; Si es forward (f) i no hi ha futur processam el torn
             (t
-             (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))) ;; Rota els torns entre e1 i e2
-                    (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1))) ;; Recarrega la pintura de l'equip actiu i suma els labs
-                    (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2))) ;; Recarrega la pintura de l'equip actiu i suma els labs
-                    (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici))) ;; Pinta-equip es la pintura que s'utilitza en el torn
-                    (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2))) ;; La memoria del equip actiu
-                    (mapa-descansat (redueix-temps-mapa mapa equip-actiu)) ;; Redueix el temps de les unitats 
-                    (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0)) ;; Cerca les unitats de l'equip actiu
-                    (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy nil)) ;; Processa totes les unitats de l'equip actiu
-                    (nou-mapa (car estat-resultant)) ;; Nou mapa
-                    (nova-pintura-equip (cadr estat-resultant)) ;; Nova pintura del equip actiu
-                    (nova-memoria-equip (caddr estat-resultant)) ;; Nova memoria del equip actiu
-                    (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici))) ;; Nova pintura de l'equip 1
-                    (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici))) ;; Nova pintura de l'equip 2
-                    (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1))) ;; Nova memoria de l'equip 1
-                    (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2))) ;; Nova memoria de l'equip 2
-                    (nova-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2) historia)) ;; Nova historia
-                    (nova-fletxes (nth 3 estat-resultant))) ;; Fletxes del torn actual
+             (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2)))
+                    (pint-e1-inici (cond ((eq equip-actiu 'e1) (+ pint-e1 2 (compta-labs-mapa mapa 'e1))) (t pint-e1)))
+                    (pint-e2-inici (cond ((eq equip-actiu 'e2) (+ pint-e2 2 (compta-labs-mapa mapa 'e2))) (t pint-e2)))
+                    (pintura-actual-equip (cond ((eq equip-actiu 'e1) pint-e1-inici) (t pint-e2-inici)))
+                    (memoria-actual-equip (cond ((eq equip-actiu 'e1) mem-e1) (t mem-e2)))
+                    (mapa-descansat (redueix-temps-mapa mapa equip-actiu))
+                    (unitats-actuants (busca-unitats-mapa mapa-descansat equip-actiu 0))
+                    (estat-resultant (processa-totes-les-unitats unitats-actuants mapa-descansat ronda pintura-actual-equip equip-actiu memoria-actual-equip dx dy nil))
+                    (nou-mapa (car estat-resultant))
+                    (nova-pintura-equip (cadr estat-resultant))
+                    (nova-memoria-equip (caddr estat-resultant))
+                    (nova-pint-e1 (cond ((eq equip-actiu 'e1) nova-pintura-equip) (t pint-e1-inici)))
+                    (nova-pint-e2 (cond ((eq equip-actiu 'e2) nova-pintura-equip) (t pint-e2-inici)))
+                    (nova-mem-e1 (cond ((eq equip-actiu 'e1) nova-memoria-equip) (t mem-e1)))
+                    (nova-mem-e2 (cond ((eq equip-actiu 'e2) nova-memoria-equip) (t mem-e2)))
+                    (nova-historia (limita-historia (cons (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 fletxes-prev) historia) 5))
+                    (nova-fletxes (nth 3 estat-resultant)))
 
                (bucle-partida (+ ronda 1) 
                               nou-mapa 
@@ -203,9 +204,8 @@
                               dx
                               dy
                               nova-historia
-                              nil ;; El futur es perd si processem un torn nou
+                              nil
                               proxim-skip nova-fletxes))))))))))
-
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
 ;; ======================================================================
