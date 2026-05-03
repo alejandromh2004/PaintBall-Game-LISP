@@ -1,16 +1,11 @@
-;; ======================================================================
-;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
-;; ======================================================================
-;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego
-;; Data: 30/04/2026
-;; Assignatura: Llenguatges de Programació (LP)
-;; Grup: <Indicar Grup>
-;; Professors: <Indicar Professors>
-;; Convocatòria: Primera Convocatòria (Ordinària)
+;; Pràctica final de Llenguatges de Programació.
+;; LISP - Paintball.
+;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego.
+;; Professor: Miquel Cabot.
+;; Lliurament: primera convocatòria.
+;; Funcions auxiliars del programa.
 
-;; ======================================================================
 ;; GESTIÓ DE MATRIUS (Estat del joc)
-;; ======================================================================
 
 ;; Retorna l'element a la posició p d'una fila f
 (defun indexa-fila (f p)

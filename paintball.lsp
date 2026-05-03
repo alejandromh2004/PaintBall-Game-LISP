@@ -1,12 +1,9 @@
-;; ======================================================================
-;; PRÀCTICA FINAL LLENGUATGES DE PROGRAMACIÓ - LISP - PAINTBALL
-;; ======================================================================
-;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego
-;; Data: 30/04/2026
-;; Assignatura: Llenguatges de Programació (LP)
-;; Grup: <Indicar Grup>
-;; Professors: <Indicar Professors>
-;; Convocatòria: Primera Convocatòria (Ordinària)
+;; Pràctica final de Llenguatges de Programació.
+;; LISP - Paintball.
+;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego.
+;; Professor: Miquel Cabot.
+;; Lliurament: primera convocatòria.
+;; Controlador general del programa.
 
 ;; Inicialitza el programa, carregant tots els fitxers necessaris
 (cond ((not (boundp '*features*)) (setq *features* nil))) 
@@ -78,9 +75,8 @@
     ;; Inicialitza el bucle de la partida
     (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil nil 0 nil))) ;; Valors inicials del bucle
 
-
+;; Limita la mida de la llista
 (defun limita-historia (lst n)
-  "Limita la mida de la llista per evitar desbordaments de memòria (Garbage Collector limit)."
   (cond ((or (null lst) (<= n 0)) nil)
         (t (cons (car lst) (limita-historia (cdr lst) (- n 1))))))
 
@@ -115,12 +111,9 @@
     (t 
      (let* ((cmd (cond 
                    ((> skip-visual 0) 'f)
-                   (t (progn
-                        ;; TRUC DEFINITIU: Movem el cursor a dalt de tot a l'esquerra (columna 0, fila 0)
-                        (goto-xy 0 0)
-                        
+                   (t (progn         
                         ;; Imprimim el HUD amb espais al final per esborrar qualsevol resta
-                        (format t "RONDA: ~A/1500 | E1: ~A | E2: ~A | ESPAI per avançar [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
+                        (format t "RONDA: ~A/1500 | E1: ~A | E2: ~A | ESPAI per continuar [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
                         
                         ;; Llegim la tecla sense generar salts de línia
                         (let* ((tecla (get-key))

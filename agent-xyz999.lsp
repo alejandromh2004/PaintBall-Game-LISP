@@ -1,13 +1,9 @@
-;; ======================================================================
-;; AGENT FUNCIONAL COMPLET v3 - ESCAPADA DE CALLEJONS + OPTIMITZACIÓ
-;; Canvis respecte v2:
-;;   1. Detecció de bloqueig (is-stuck): 4 posicions dins dist²<10 → stuck
-;;   2. Rotació de direcció per unitat (unit-dirs en memòria)
-;;      → cada vegada que es queda atrapat, gira +1 direcció fins sortir
-;;   3. Límit de labs a 15 entrades (evita O(n) creixent)
-;;   4. Límit d'aliats visibles a 6 abans del càlcul anti-ramada
-;;   5. dir-idx s'obté de la memòria (no de abs-id fix)
-;; ======================================================================
+;; Pràctica final de Llenguatges de Programació.
+;; LISP - Paintball.
+;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego.
+;; Professor: Miquel Cabot.
+;; Lliurament: primera convocatòria.
+;; Agent intel·ligent del programa equip 1.
 
 (defun agent-xyz999-abs (n)
   (cond ((null n) 0) ((< n 0) (- n)) (t n)))
