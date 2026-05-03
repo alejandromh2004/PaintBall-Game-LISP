@@ -6,6 +6,23 @@
 ;; Data: 03/05/2026
 ;; Grup: 101
 ;; Controlador general del programa.
+;; INDICACIONS D'ÚS:
+;; 1. Carregar el fitxer: (load "amh976_jvs328_PAINTBALL_LISP/paintball.lsp")
+;; 2. Iniciar partida: (inici) o (inici "amh976_jvs328_PAINTBALL_LISP/maps/basic3.map")
+;;
+;; ASPECTES OPCIONALS IMPLEMENTATS:
+;; - Suport per a mapes grans (60x60) amb escalat automàtic.
+;; - Sistema de navegació històrica (tecla 'b') i salts de torn (tecla 's').
+;; - Mòdul gràfic optimitzat amb dibuix diferencial.
+;; - Tail Call Optimization (TCO) mitjançant macro a tco.lsp.
+;; - Estratègies avançades d'agents (Flocking, Rols dinàmics, Memòria compartida).
+;;
+;; DISSENY FUNCIONAL:
+;; El programa segueix estrictament el paradigma funcional, eliminant qualsevol
+;; reassignació o mutació d'estructures en la lògica de joc. El processament 
+;; de torns i unitats es realitza de manera seqüencial mitjançant recursivitat
+;; de cua, garantint la integritat de l'estat en cada ronda.
+;; Recomenable llegir README.md per a mes informació.
 
 ;; Inicialitza el programa, carregant tots els fitxers necessaris
 (cond ((not (boundp '*features*)) (setq *features* nil))) 
