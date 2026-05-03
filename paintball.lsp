@@ -92,15 +92,15 @@
   (cond 
     ((= (compta-bases-mapa mapa 'e1) 0)
      (format t "~%==================================================~%")
-     (format t "    VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT    ~%")
-     (format t "               GUANYA L'EQUIP 2!                  ~%")
+     (format t "VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT~%")
+     (format t "GUANYA L'EQUIP 2!~%")
      (format t "==================================================~%")
      'fi-de-partida)
 
     ((= (compta-bases-mapa mapa 'e2) 0)
      (format t "~%==================================================~%")
-     (format t "    VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT    ~%")
-     (format t "               GUANYA L'EQUIP 1!                  ~%")
+     (format t "VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT~%")
+     (format t "GUANYA L'EQUIP 1!~%")
      (format t "==================================================~%")
      'fi-de-partida)
 
@@ -112,8 +112,9 @@
      (let* ((cmd (cond 
                    ((> skip-visual 0) 'f)
                    (t (progn         
-                        ;; Imprimim el HUD amb espais al final per esborrar qualsevol resta
-                        (format t "RONDA: ~A/1500 | E1: ~A | E2: ~A | ESPAI per continuar [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
+                        ;; Imprimim el HUD a l'esquerra amb goto-xy
+                        (goto-xy 0 0)
+                        (format t "R:~A/1500 | E1:~A | E2:~A | [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
                         
                         ;; Llegim la tecla sense generar salts de línia
                         (let* ((tecla (get-key))
@@ -128,7 +129,7 @@
             
             ;; Aquest càlcul ara pertany correctament al mateix let*
             (proxim-skip (cond ((eq cmd 's) 
-                                (format t "~%Quantes rondes vols saltar? ")
+                                (format t "~%Rondes: ")
                                 (let ((n (read))) (max 0 (- n 1))))
                                ((> skip-visual 0) (- skip-visual 1))
                                (t 0))))
@@ -244,20 +245,20 @@
   (let ((bolles-e1 (compta-bolles-mapa mapa 'e1))
         (bolles-e2 (compta-bolles-mapa mapa 'e2)))
     (format t "~%==================================================~%")
-    (format t "   FINAL PER LIMIT DE TORNS (1500) - DESEMPAT     ~%")
-    (format t "   Equip 1: ~A bolles | Equip 2: ~A bolles        ~%" bolles-e1 bolles-e2)
-    (format t "   Pintura 1: ~A    | Pintura 2: ~A               ~%" pint-e1 pint-e2)
+    (format t "FINAL PER LIMIT DE TORNS (1500) - DESEMPAT~%")
+    (format t "Equip 1: ~A bolles | Equip 2: ~A bolles~%" bolles-e1 bolles-e2)
+    (format t "Pintura 1: ~A | Pintura 2: ~A~%" pint-e1 pint-e2)
     (format t "==================================================~%")
     (cond 
       ;; Guanya l'equip amb mes bolles vives
-      ((> bolles-e1 bolles-e2) (format t "           GUANYA L'EQUIP 1 PER BOLLES!           ~%"))
-      ((> bolles-e2 bolles-e1) (format t "           GUANYA L'EQUIP 2 PER BOLLES!           ~%"))
+      ((> bolles-e1 bolles-e2) (format t "GUANYA L'EQUIP 1 PER BOLLES!~%"))
+      ((> bolles-e2 bolles-e1) (format t "GUANYA L'EQUIP 2 PER BOLLES!~%"))
       ;; Guanya l'equip amb mes reserva de pintura
-      ((> pint-e1 pint-e2) (format t "          GUANYA L'EQUIP 1 PER PINTURA!           ~%"))
-      ((> pint-e2 pint-e1) (format t "          GUANYA L'EQUIP 2 PER PINTURA!           ~%"))
+      ((> pint-e1 pint-e2) (format t "GUANYA L'EQUIP 1 PER PINTURA!~%"))
+      ((> pint-e2 pint-e1) (format t "GUANYA L'EQUIP 2 PER PINTURA!~%"))
       ;; Guanya un equip aleatòriament
       (t (let ((guanyador (nth (random 2) '(e1 e2))))
-           (format t "          GUANYA L'EQUIP ~A PER SORT!             ~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
+           (format t "GUANYA L'EQUIP ~A PER SORT!~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
 
 
 
