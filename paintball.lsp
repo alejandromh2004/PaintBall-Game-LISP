@@ -112,7 +112,7 @@
                    (t (progn         
                         ;; Imprimim el HUD a l'esquerra amb goto-xy
                         (goto-xy 0 0)
-                        (format t "R:~A/1500 | E1:~A | E2:~A | [s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
+                        (format t "R:~A/1500 | E1:~A | E2:~A | [ENTER=Seguent, s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
                         
                         ;; Llegim la tecla sense generar salts de línia
                         (let* ((tecla (get-key))
@@ -124,8 +124,6 @@
                                 ((string-equal t-str "q") 'q)
                                 ((string-equal t-str "s") 's)
                                 (t 'f)))))))
-            
-            ;; Aquest càlcul ara pertany correctament al mateix let*
             (proxim-skip (cond ((eq cmd 's) 
                                 (format t "~%Rondes: ")
                                 (let ((n (read))) (max 0 (- n 1))))
