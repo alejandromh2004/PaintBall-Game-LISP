@@ -72,19 +72,19 @@
   (let ((dx (random 1000)) ;; Desplaçament horitzontal aleatori per a les unitats
         (dy (random 1000)) ;; Desplaçament vertical aleatori per a les unitats
         (mapa-prep (prepara-mapa-inicial mapa-inicial 0)))
-    ;; Inicialitza el bucle de la partida
-    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil nil 0 nil))) ;; Valors inicials del bucle
+    ;; Iniciem el bucle amb el flag de redibuixat activat
+    (bucle-partida 1 mapa-prep 200 200 nil nil dx dy nil nil 0 nil t)))
 
 ;; Limita la mida de la llista
 (defun limita-historia (lst n)
   (cond ((or (null lst) (<= n 0)) nil)
         (t (cons (car lst) (limita-historia (cdr lst) (- n 1))))))
 
-(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia futur skip-visual fletxes-prev)
+(defun-tco bucle-partida (ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 dx dy historia futur skip-visual fletxes-prev força-cls)
   ;; Dibuixem només si no estem saltant torns visuals
   (cond ((<= skip-visual 0)
-         (let ((mapa-ant (cond (historia (cadr (car historia))) (t nil)))
-               (fletxes-pantalla (cond (historia (nth 6 (car historia))) (t nil))))
+         (let ((mapa-ant (cond (força-cls nil) (historia (cadr (car historia))) (t nil)))
+               (fletxes-pantalla (cond (força-cls nil) (historia (nth 6 (car historia))) (t nil))))
            (dibuixa-mapa mapa mapa-ant fletxes-pantalla fletxes-prev ronda
                          (cond ((= (mod ronda 2) 1) 'e1) (t 'e2))
                          pint-e1 pint-e2))))
@@ -147,13 +147,14 @@
                            (nth 4 estat-ant) 
                            (nth 5 estat-ant) 
                            dx dy (cdr historia) (cons estat-actual futur) 0 
-                           (nth 6 estat-ant))))
+                           (nth 6 estat-ant) t)))
          
          (t 
           (cond
             ((and (eq cmd 'f) futur (<= skip-visual 0))
-             (let ((estat-seg (car futur))
-                   (estat-act (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 fletxes-prev)))
+             (let ((estat-act (list ronda mapa pint-e1 pint-e2 mem-e1 mem-e2 fletxes-prev))
+                   (estat-seg (car futur))
+                   (fut-restant (cdr futur)))
                (bucle-partida (car estat-seg) 
                               (cadr estat-seg) 
                               (caddr estat-seg) 
@@ -162,9 +163,9 @@
                               (nth 5 estat-seg) 
                               dx dy 
                               (cons estat-act historia) 
-                              (cdr futur) 
+                              fut-restant 
                               0 
-                              (nth 6 estat-seg))))
+                              (nth 6 estat-seg) t)))
             
             (t
              (let* ((equip-actiu (cond ((= (mod ronda 2) 1) 'e1) (t 'e2)))
@@ -195,7 +196,7 @@
                               dy
                               nova-historia
                               nil
-                              proxim-skip nova-fletxes))))))))))
+                              proxim-skip nova-fletxes (or (> skip-visual 0) (eq cmd 's))))))))))))
 ;; ======================================================================
 ;; CONDICIÓ DE VICTÒRIA: COMPTAR BASES
 ;; ======================================================================
