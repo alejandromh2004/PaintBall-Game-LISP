@@ -7,15 +7,15 @@
 
 ;; Inicialitza el programa, carregant tots els fitxers necessaris
 (cond ((not (boundp '*features*)) (setq *features* nil))) 
-(load "proyectos/projecte_inicial/common.lsp") 
-(load "proyectos/projecte_inicial/tco.lsp")    
-(load "proyectos/projecte_inicial/funciones_auxiliares.lsp")
-(load "proyectos/projecte_inicial/grafics.lsp")
-(load "proyectos/projecte_inicial/agent-abc123.lsp")
-(load "proyectos/projecte_inicial/agent-xyz999.lsp")
+(load "amh976_jvs328_PAINTBALL_LISP/common.lsp") 
+(load "amh976_jvs328_PAINTBALL_LISP/tco.lsp")    
+(load "amh976_jvs328_PAINTBALL_LISP/funciones_auxiliares.lsp")
+(load "amh976_jvs328_PAINTBALL_LISP/grafics.lsp")
+(load "amh976_jvs328_PAINTBALL_LISP/agent-amh976.lsp")
+(load "amh976_jvs328_PAINTBALL_LISP/agent-jvs328.lsp")
 
 ;; Punt d'entrada del programa
-(defun inici (&optional (fitxer "proyectos/projecte_inicial/maps/bait.map"))
+(defun inici (&optional (fitxer "amh976_jvs328_PAINTBALL_LISP/maps/bait.map"))
   (BLACK) 
   (mode 0 0 640 400) 
   
@@ -368,8 +368,8 @@
 (defun demana-accions-agent (dades-empaquetades)
   (let ((equip (nth 1 dades-empaquetades))) ;; Comprova a quí s'ha de cridar
     (cond 
-      ((eq equip 'e1) (agent-xyz999 dades-empaquetades))
-      ((eq equip 'e2) (agent-abc123 dades-empaquetades))
+      ((eq equip 'e1) (agent-jvs328 dades-empaquetades))
+      ((eq equip 'e2) (agent-amh976 dades-empaquetades))
       (t nil))))
 
 ;; ======================================================================
