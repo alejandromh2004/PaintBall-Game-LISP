@@ -91,21 +91,19 @@
 
   (cond 
     ((= (compta-bases-mapa mapa 'e1) 0)
-     (format t "~%==================================================~%")
-     (format t "VICTORIA! LA BASE DE L'EQUIP 1 HA EXPLOTAT~%")
-     (format t "GUANYA L'EQUIP 2!~%")
-     (format t "==================================================~%")
+     (dibuixa-mapa mapa nil nil nil ronda 'e2 pint-e1 pint-e2)
+     (goto-xy 0 1)
+     (format t "VICTORIA EQUIPO 2                  ")
      'fi-de-partida)
 
     ((= (compta-bases-mapa mapa 'e2) 0)
-     (format t "~%==================================================~%")
-     (format t "VICTORIA! LA BASE DE L'EQUIP 2 HA EXPLOTAT~%")
-     (format t "GUANYA L'EQUIP 1!~%")
-     (format t "==================================================~%")
+     (dibuixa-mapa mapa nil nil nil ronda 'e1 pint-e1 pint-e2)
+     (goto-xy 0 1)
+     (format t "VICTORIA EQUIPO 1                  ")
      'fi-de-partida)
 
     ((> ronda 1500)
-     (determina-guanyador-empat mapa pint-e1 pint-e2)
+     (determina-guanyador-empat mapa pint-e1 pint-e2 ronda)
      'fi-de-partida)
         
     (t 
@@ -241,24 +239,23 @@
               (compta-bolles-mapa (cdr mapa) equip)))))
 
 ;; Determina el guanyador segons el criteri de desempat
-(defun determina-guanyador-empat (mapa pint-e1 pint-e2)
+(defun determina-guanyador-empat (mapa pint-e1 pint-e2 ronda)
   (let ((bolles-e1 (compta-bolles-mapa mapa 'e1))
         (bolles-e2 (compta-bolles-mapa mapa 'e2)))
-    (format t "~%==================================================~%")
-    (format t "FINAL PER LIMIT DE TORNS (1500) - DESEMPAT~%")
-    (format t "Equip 1: ~A bolles | Equip 2: ~A bolles~%" bolles-e1 bolles-e2)
-    (format t "Pintura 1: ~A | Pintura 2: ~A~%" pint-e1 pint-e2)
-    (format t "==================================================~%")
+    (dibuixa-mapa mapa nil nil nil ronda 'e1 pint-e1 pint-e2)
+    (goto-xy 0 1)
     (cond 
-      ;; Guanya l'equip amb mes bolles vives
-      ((> bolles-e1 bolles-e2) (format t "GUANYA L'EQUIP 1 PER BOLLES!~%"))
-      ((> bolles-e2 bolles-e1) (format t "GUANYA L'EQUIP 2 PER BOLLES!~%"))
-      ;; Guanya l'equip amb mes reserva de pintura
-      ((> pint-e1 pint-e2) (format t "GUANYA L'EQUIP 1 PER PINTURA!~%"))
-      ((> pint-e2 pint-e1) (format t "GUANYA L'EQUIP 2 PER PINTURA!~%"))
-      ;; Guanya un equip aleatòriament
-      (t (let ((guanyador (nth (random 2) '(e1 e2))))
-           (format t "GUANYA L'EQUIP ~A PER SORT!~%" (cond ((eq guanyador 'e1) 1) (t 2))))))))
+      ((> bolles-e1 bolles-e2) 
+       (format t "VICTORIA EQUIPO 1 (DESEMPAT: ~A vs ~A bolles)          " bolles-e1 bolles-e2))
+      ((> bolles-e2 bolles-e1) 
+       (format t "VICTORIA EQUIPO 2 (DESEMPAT: ~A vs ~A bolles)          " bolles-e2 bolles-e1))
+      ((> pint-e1 pint-e2) 
+       (format t "VICTORIA EQUIPO 1 (DESEMPAT: ~A vs ~A pintura)         " pint-e1 pint-e2))
+      ((> pint-e2 pint-e1) 
+       (format t "VICTORIA EQUIPO 2 (DESEMPAT: ~A vs ~A pintura)         " pint-e2 pint-e1))
+      (t 
+       (let ((guanyador (nth (random 2) '(1 2))))
+         (format t "VICTORIA EQUIPO ~A (DESEMPAT: SORT)                  " guanyador))))))
 
 
 
