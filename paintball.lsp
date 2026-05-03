@@ -112,7 +112,7 @@
                    (t (progn         
                         ;; Imprimim el HUD a l'esquerra amb goto-xy
                         (goto-xy 0 0)
-                        (format t "R:~A/1500 | E1:~A | E2:~A | [ENTER=Seguent, s=Salt, q=Surt]          " ronda pint-e1 pint-e2)
+                        (format t "R:~A/1500 | E1:~A | E2:~A | [ENTER=Seguent, s=Salt, b=Enrere, q=Surt]          " ronda pint-e1 pint-e2)
                         
                         ;; Llegim la tecla sense generar salts de línia
                         (let* ((tecla (get-key))
