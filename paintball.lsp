@@ -3,6 +3,8 @@
 ;; Estudiants: Alejandro Martinez Hermosa, Javier Vivo Samaniego.
 ;; Professor: Miquel Cabot.
 ;; Lliurament: primera convocatòria.
+;; Data: 03/05/2026
+;; Grup: 101
 ;; Controlador general del programa.
 
 ;; Inicialitza el programa, carregant tots els fitxers necessaris

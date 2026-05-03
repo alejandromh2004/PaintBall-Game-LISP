@@ -4,7 +4,7 @@
 
 ### Com carregar el joc
 
-1. Obriu el vostre entorn LISP a la carpeta del projecte.
+1. Obriu el vostre entorn LISP (fora de la carpeta del projecte)
 2. Carregueu el controlador principal:
    ```lisp
    (load "amh976_jvs328_PAINTBALL_LISP/paintball.lsp")
